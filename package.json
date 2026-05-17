@@ -1,0 +1,8 @@
+{
+  "name": "dialer-phoneapp-poc",
+  "private": true,
+  "scripts": {
+    "dev": "npm --prefix ./callpulse-dialer run dev",
+    "dev:app": "npm --prefix ./callpulse-dialer run dev"
+  }
+}

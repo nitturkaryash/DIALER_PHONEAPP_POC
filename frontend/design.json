@@ -1,0 +1,109 @@
+{
+  "name": "Callivio Dashboard",
+  "version": "1.0.0",
+  "colors": {
+    "primary": "#6FA3D2",
+    "primaryGradientStart": "#6FA3D2",
+    "primaryGradientEnd": "#89B9E3",
+    "accent": "#C3E836",
+    "background": "#F5F5F7",
+    "card": "#FFFFFF",
+    "textPrimary": "#1A1A1A",
+    "textSecondary": "#6B7280",
+    "textTertiary": "#9CA3AF",
+    "success": "#10B981",
+    "error": "#EF4444",
+    "warning": "#F59E0B",
+    "border": "#E5E7EB"
+  },
+  "typography": {
+    "fontSize": {
+      "xs": 11,
+      "sm": 12,
+      "base": 14,
+      "md": 16,
+      "lg": 18,
+      "xl": 24,
+      "2xl": 32
+    },
+    "fontWeight": {
+      "light": 300,
+      "regular": 400,
+      "medium": 500,
+      "semibold": 600,
+      "bold": 700
+    }
+  },
+  "spacing": {
+    "xs": 4,
+    "sm": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "2xl": 32,
+    "3xl": 48,
+    "4xl": 64
+  },
+  "radius": {
+    "sm": 4,
+    "base": 8,
+    "md": 12,
+    "lg": 16,
+    "xl": 24,
+    "full": 9999
+  },
+  "card": {
+    "background": "#FFFFFF",
+    "radius": 16,
+    "padding": 24,
+    "shadow": "0 2px 12px rgba(0,0,0,0.06)",
+    "hoverShadow": "0 4px 20px rgba(0,0,0,0.10)",
+    "transition": "all 250ms ease"
+  },
+  "buttons": {
+    "primary": {
+      "gradientAngle": 135,
+      "gradientStart": "#6FA3D2",
+      "gradientEnd": "#89B9E3",
+      "textColor": "#FFFFFF",
+      "radius": 8
+    },
+    "secondary": {
+      "background": "#FFFFFF",
+      "textColor": "#6B7280",
+      "borderColor": "#E5E7EB"
+    },
+    "call": {
+      "background": "#C3E836",
+      "textColor": "#1A1A1A",
+      "radius": 12
+    },
+    "danger": {
+      "background": "#EF4444",
+      "textColor": "#FFFFFF",
+      "shape": "circle"
+    }
+  },
+  "badges": {
+    "success": {
+      "background": "#F0FDF4",
+      "textColor": "#10B981",
+      "borderColor": "#10B98120"
+    },
+    "error": {
+      "background": "#FEE2E2",
+      "textColor": "#EF4444",
+      "borderColor": "#EF444420"
+    },
+    "neutral": {
+      "background": "#F3F4F6",
+      "textColor": "#6B7280",
+      "borderColor": "#6B728020"
+    },
+    "warning": {
+      "background": "#FEF3C7",
+      "textColor": "#F59E0B",
+      "borderColor": "#F59E0B20"
+    }
+  }
+}

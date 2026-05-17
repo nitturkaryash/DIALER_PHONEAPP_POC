@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "CallPulse Dialer",
+    "slug": "callpulse-dialer",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "callpulse-dialer",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.callpulse.dialer",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "CallPulse needs microphone access so you can speak with customers on live calls.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "android": {
+      "package": "com.callpulse.dialer",
+      "usesCleartextTraffic": true,
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "adaptiveIcon": {
+        "backgroundColor": "#F5F5F7"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-asset",
+      "expo-font"
+    ]
+  }
+}

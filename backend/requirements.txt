@@ -1,0 +1,79 @@
+# ============================================
+# CORE - Pipecat AI Framework
+# ============================================
+pipecat-ai[groq,livekit,webrtc,sarvam,deepgram]
+pipecat-ai-small-webrtc-prebuilt
+livekit-api
+
+# ============================================
+# SIP / OUTBOUND CALLING
+# ============================================
+# For Telnyx SIP integration
+httpx>=0.24.0
+
+# ============================================
+# Pin these to avoid resolver drift
+# ============================================
+aiohttp
+numpy==1.26.4
+protobuf==5.29.6
+
+# ============================================
+# Audio/Video Dependencies
+# ============================================
+# SmallWebRTC imports cv2
+opencv-python<4.13
+
+# ============================================
+# AI Services / SDKs
+# ============================================
+# Speech-to-Text (via Groq Whisper)
+groq
+
+# LLM Providers
+google-genai
+google-api-python-client
+google-auth
+openai
+
+# ============================================
+# Networking (WebRTC/SIP)
+# ============================================
+websockets
+aioice
+aiortc
+
+# ============================================
+# Web Framework (FastAPI)
+# ============================================
+fastapi
+uvicorn[standard]
+python-multipart
+motor
+PyJWT
+
+# ============================================
+# Utilities
+# ============================================
+python-dotenv
+pytz
+loguru
+pypdf
+boto3
+
+# ============================================
+# Data Validation
+# ============================================
+pydantic>=2.0.0
+email-validator
+redis
+
+# ============================================
+# Development (Optional)
+# ============================================
+# ngrok for local webhook testing
+# pyngrok
+
+# pytest for testing
+# pytest
+# pytest-asyncio
