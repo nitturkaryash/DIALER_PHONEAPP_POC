@@ -14,6 +14,8 @@ import type {
   HumanAgentCallRequest,
   HumanAgentCallResponse,
   HumanAgentCallStatus,
+  CallHistoryResponse,
+  CallHistoryDetailResponse,
   OutboundCallRequest,
   OutboundCallResponse,
   OutboundCallStatus,
@@ -258,4 +260,36 @@ export async function saveHumanAgentDisposition(
 
 export async function notifyHumanAgentJoined(token: string, callId: string): Promise<void> {
   await request(`/v1/agent-calls/${callId}/agent-joined`, { method: "POST" }, token);
+}
+
+export async function getCallHistory(
+  token: string,
+  params: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    status?: string;
+    campaign_id?: string;
+    date_from?: string;
+    date_to?: string;
+  } = {}
+): Promise<CallHistoryResponse> {
+  const query = new URLSearchParams();
+  if (params.page) query.set("page", String(params.page));
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.campaign_id) query.set("campaign_id", params.campaign_id);
+  if (params.date_from) query.set("date_from", params.date_from);
+  if (params.date_to) query.set("date_to", params.date_to);
+
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request(`/api/calls/history${suffix}`, { method: "GET" }, token);
+}
+
+export async function getCallHistoryDetail(
+  token: string,
+  callId: string
+): Promise<CallHistoryDetailResponse> {
+  return request(`/api/calls/history/${encodeURIComponent(callId)}`, { method: "GET" }, token);
 }

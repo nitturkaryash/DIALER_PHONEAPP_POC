@@ -142,3 +142,63 @@ export type HumanAgentCallStatus = {
   ended_at?: string | null;
   duration_seconds?: number | null;
 };
+
+export type CallHistoryItem = {
+  id: string;
+  call_id: string;
+  customer_name: string;
+  phone_number: string;
+  status: string;
+  campaign_name?: string | null;
+  started_at?: string | null;
+  duration_seconds?: number | null;
+};
+
+export type CallHistorySummaryItem = {
+  campaign_id?: string | null;
+  campaign_name: string;
+  total_calls: number;
+  total_duration_seconds: number;
+};
+
+export type CallHistorySummary = {
+  total_calls: number;
+  completed_calls: number;
+  total_duration_seconds: number;
+  campaign_total_duration_seconds: number;
+  direct_total_duration_seconds: number;
+  campaign_breakdown: CallHistorySummaryItem[];
+};
+
+export type CallHistoryPagination = {
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+};
+
+export type CallHistoryResponse = {
+  ok: boolean;
+  calls: CallHistoryItem[];
+  summary: CallHistorySummary;
+  pagination: CallHistoryPagination;
+};
+
+export type CallHistoryDetail = {
+  id: string;
+  call_id: string;
+  customer_name: string;
+  phone_number: string;
+  campaign_name?: string | null;
+  started_at?: string | null;
+  ended_at?: string | null;
+  created_at?: string | null;
+  duration_seconds?: number | null;
+  audio_url?: string | null;
+  transcription?: string | null;
+};
+
+export type CallHistoryDetailResponse = {
+  ok: boolean;
+  call: CallHistoryDetail;
+};

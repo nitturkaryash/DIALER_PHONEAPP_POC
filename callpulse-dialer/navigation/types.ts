@@ -10,6 +10,7 @@ export type CampaignsStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   Dial: undefined;
+  CallHistory: undefined;
   Campaigns: NavigatorScreenParams<CampaignsStackParamList> | undefined;
 };
 
@@ -33,5 +34,8 @@ export type RootStackParamList = {
     callMode?: "dialer" | "human";
     processId?: string;
     processName?: string;
+  };
+  CallHistoryDetail: {
+    callId: string;
   };
 };

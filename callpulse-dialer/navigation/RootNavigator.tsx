@@ -8,6 +8,7 @@ import DispositionScreen from "../screens/DispositionScreen";
 import LoginScreen from "../screens/LoginScreen";
 import HumanCallScreen from "../screens/HumanCallScreen";
 import OutboundCallScreen from "../screens/OutboundCallScreen";
+import CallHistoryDetailScreen from "../screens/CallHistoryDetailScreen";
 import { theme } from "../theme";
 import MainTabNavigator from "./MainTabNavigator";
 import type { RootStackParamList } from "./types";
@@ -61,6 +62,7 @@ export default function RootNavigator() {
       <Stack.Screen name="HumanCall" component={HumanCallScreen} options={modalOptions} />
       <Stack.Screen name="Call" component={CallScreen} options={modalOptions} />
       <Stack.Screen name="Disposition" component={DispositionScreen} options={modalOptions} />
+      <Stack.Screen name="CallHistoryDetail" component={CallHistoryDetailScreen} options={modalOptions} />
     </Stack.Navigator>
   );
 }
