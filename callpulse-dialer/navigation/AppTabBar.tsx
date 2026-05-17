@@ -21,9 +21,10 @@ const TAB_CONFIG: Record<string, TabConfig> = {
 
 export default function AppTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const bottomInset = Math.max(insets.bottom, theme.spacing.sm);
 
   return (
-    <View style={[styles.wrap, { paddingBottom: Math.max(insets.bottom, theme.spacing.sm) }]}>
+    <View style={[styles.wrap, { paddingBottom: bottomInset, minHeight: 56 + bottomInset }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
         const config = TAB_CONFIG[route.name] ?? { label: route.name, icon: "•" };
@@ -75,6 +76,7 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
     paddingTop: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.sm,
     ...theme.shadow.card,
   },
   tab: {

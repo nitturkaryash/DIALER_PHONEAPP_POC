@@ -1,13 +1,15 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   LayoutAnimation,
   Platform,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
   UIManager,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
@@ -22,44 +24,52 @@ if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const KEYPAD: Array<string | "back" | "clear"> = [
-  "1",
-  "2",
-  "3",
-  "4",
-  "5",
-  "6",
-  "7",
-  "8",
-  "9",
-  "*",
-  "0",
-  "#",
-  "back",
+const KEYPAD: Array<{ key: string; sub?: string }> = [
+  { key: "1" },
+  { key: "2", sub: "ABC" },
+  { key: "3", sub: "DEF" },
+  { key: "4", sub: "GHI" },
+  { key: "5", sub: "JKL" },
+  { key: "6", sub: "MNO" },
+  { key: "7", sub: "PQRS" },
+  { key: "8", sub: "TUV" },
+  { key: "9", sub: "WXYZ" },
+  { key: "*" },
+  { key: "0", sub: "+" },
+  { key: "#" },
 ];
 
 export default function DialerScreen() {
   const navigation = useRootNavigation();
+  const { width } = useWindowDimensions();
   const [digits, setDigits] = useState("");
   const [customerName, setCustomerName] = useState("Manual Dial");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const compact = width < 380;
+
+  const contentMaxWidth = useMemo(() => Math.min(560, width - theme.spacing.screen * 2), [width]);
+  const keySize = useMemo(() => {
+    const gap = compact ? 12 : 16;
+    const keypadWidth = Math.min(contentMaxWidth, compact ? 320 : 360);
+    const keyWidth = Math.floor((keypadWidth - gap * 2) / 3);
+    return {
+      width: keyWidth,
+      height: keyWidth,
+    };
+  }, [compact, contentMaxWidth]);
 
   const bumpLayout = () => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
   };
 
-  const onKey = useCallback((key: string | "back" | "clear") => {
+  const onKey = useCallback((key: string | "back") => {
     if (Platform.OS !== "web") {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
     bumpLayout();
     if (key === "back") {
       setDigits((prev) => prev.slice(0, -1));
-      return;
-    }
-    if (key === "clear") {
-      setDigits("");
       return;
     }
     if (digitsOnly(digits).length >= 15) return;
@@ -119,68 +129,94 @@ export default function DialerScreen() {
       end={{ x: 0, y: 1 }}
       style={styles.gradient}
     >
-      <View style={styles.container}>
-        <Text style={styles.title}>Dial</Text>
-        <Text style={styles.subtitle}>Enter a number for a live agent call (your microphone)</Text>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={[styles.container, { maxWidth: contentMaxWidth }]}>
+          <Text style={styles.title}>Dial</Text>
+          <Text style={styles.subtitle}>Enter a number for a live agent call (your microphone)</Text>
 
-        <View style={styles.displayCard}>
-          <Text style={styles.display}>{display || " "}</Text>
-          <Text style={styles.displayHint}>{normalizePhone(digits) || "Phone number"}</Text>
-        </View>
+          <View style={styles.displayCard}>
+            <Text style={[styles.display, compact && styles.displayCompact]} numberOfLines={1}>
+              {display || " "}
+            </Text>
+            <Text style={styles.displayHint}>{normalizePhone(digits) || "Phone number"}</Text>
+          </View>
 
-        <TextInput
-          style={styles.nameInput}
-          value={customerName}
-          onChangeText={setCustomerName}
-          placeholder="Contact name"
-          placeholderTextColor={theme.colors.textTertiary}
-        />
+          <TextInput
+            style={styles.nameInput}
+            value={customerName}
+            onChangeText={setCustomerName}
+            placeholder="Contact name"
+            placeholderTextColor={theme.colors.textTertiary}
+          />
 
-        {!!error && <Text style={styles.error}>{error}</Text>}
+          {!!error && <Text style={styles.error}>{error}</Text>}
 
-        <View style={styles.keypad}>
-          {KEYPAD.map((key) => {
-            const label = key === "back" ? "⌫" : key === "clear" ? "C" : key;
-            return (
-              <TouchableOpacity
-                key={String(key)}
-                activeOpacity={0.85}
-                style={styles.key}
-                onPress={() => onKey(key)}
-                onLongPress={key === "back" ? () => onKey("clear") : undefined}
-              >
-                <Text style={styles.keyText}>{label}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+          <View style={styles.keypad}>
+            {KEYPAD.map((entry) => {
+              return (
+                <TouchableOpacity
+                  key={entry.key}
+                  activeOpacity={0.85}
+                  style={[styles.key, keySize]}
+                  onPress={() => onKey(entry.key)}
+                >
+                  <Text style={[styles.keyText, compact && styles.keyTextCompact]}>{entry.key}</Text>
+                  {!!entry.sub && <Text style={styles.keySub}>{entry.sub}</Text>}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
 
-        <TouchableOpacity activeOpacity={0.85} onPress={onCall} disabled={!canCall} style={!canCall ? styles.callDisabled : undefined}>
-          <LinearGradient
-            colors={canCall ? theme.colors.primaryGradient : [theme.colors.muted, theme.colors.muted]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.callBtn}
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.backspaceBtn}
+            onPress={() => onKey("back")}
+            onLongPress={() => setDigits("")}
           >
-            {loading ? (
-              <ActivityIndicator color={theme.colors.card} />
-            ) : (
-              <Text style={styles.callBtnText}>Call</Text>
-            )}
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+            <Text style={styles.backspaceText}>⌫</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={onCall}
+            disabled={!canCall}
+            style={[styles.callWrap, !canCall ? styles.callDisabled : undefined]}
+          >
+            <LinearGradient
+              colors={canCall ? theme.colors.primaryGradient : [theme.colors.muted, theme.colors.muted]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.callBtn}
+            >
+              {loading ? (
+                <ActivityIndicator color={theme.colors.card} />
+              ) : (
+                <Text style={styles.callBtnText}>Call</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
   gradient: { flex: 1 },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: theme.spacing.lg,
+  },
   container: {
-    flex: 1,
+    width: "100%",
+    alignSelf: "center",
     paddingHorizontal: theme.spacing.screen,
     paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.lg,
+    paddingBottom: theme.spacing.xl,
   },
   title: {
     fontSize: theme.fontSize.xl,
@@ -207,6 +243,9 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
     letterSpacing: 1,
     minHeight: 40,
+  },
+  displayCompact: {
+    fontSize: theme.fontSize.xl,
   },
   displayHint: {
     marginTop: theme.spacing.xs,
@@ -236,20 +275,49 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
   },
   key: {
-    width: "30%",
-    aspectRatio: 1.35,
-    maxHeight: 56,
+    minWidth: 72,
     marginBottom: theme.spacing.sm,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
+    backgroundColor: "#F1F1F1",
+    borderRadius: theme.radius.full,
     alignItems: "center",
     justifyContent: "center",
-    ...theme.shadow.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "#E6E6E6",
   },
   keyText: {
-    fontSize: theme.fontSize.lg,
-    fontWeight: "500",
+    fontSize: 34,
+    fontWeight: "400",
+    color: "#111111",
+  },
+  keyTextCompact: {
+    fontSize: 30,
+  },
+  keySub: {
+    marginTop: -2,
+    fontSize: theme.fontSize.xs,
+    letterSpacing: 1,
+    color: "#111111",
+    fontWeight: "600",
+  },
+  backspaceBtn: {
+    alignSelf: "center",
+    width: 56,
+    height: 56,
+    borderRadius: theme.radius.full,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: -theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  backspaceText: {
+    fontSize: 22,
     color: theme.colors.textPrimary,
+  },
+  callWrap: {
+    marginTop: theme.spacing.xs,
   },
   callBtn: {
     height: 52,

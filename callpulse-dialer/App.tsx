@@ -9,7 +9,8 @@ import { theme } from "./theme";
 export default function App() {
   return (
     <SafeAreaProvider>
-      <SafeAreaView style={{ flex: 1, backgroundColor: theme.colors.bg }}>
+      {/* Keep only top inset here; bottom inset is handled by the custom tab bar. */}
+      <SafeAreaView edges={["top"]} style={{ flex: 1, backgroundColor: theme.colors.bg }}>
         <NavigationContainer>
           <RootNavigator />
         </NavigationContainer>
