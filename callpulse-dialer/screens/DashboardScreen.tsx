@@ -8,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { ScreenChrome } from "../components/ui";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { CompositeScreenProps } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
@@ -166,12 +166,7 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
   );
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <ScreenChrome>
       <ScrollView
         contentContainerStyle={styles.container}
         refreshControl={
@@ -262,7 +257,7 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
                 label="Qualified"
                 value={funnel?.qualified ?? 0}
                 max={maxFunnelValue}
-                color={theme.colors.accent}
+                color={theme.colors.chartQualified}
               />
               <FunnelRow
                 label="Converted"
@@ -304,7 +299,7 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           </>
         )}
       </ScrollView>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 

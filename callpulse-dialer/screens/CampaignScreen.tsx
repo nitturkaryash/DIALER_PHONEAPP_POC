@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, FlatList, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { ScreenChrome, StatusPanel } from "../components/ui";
 import type { CampaignsStackParamList } from "../navigation/types";
 import { useRootNavigation } from "../navigation/useRootNavigation";
 import { AuthError, clearToken, getCampaigns, getMe, getToken } from "../services/api";
@@ -44,7 +44,7 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [navigation, onLoggedOut]);
+  }, [onLoggedOut, rootNavigation]);
 
   useEffect(() => {
     load();
@@ -71,43 +71,32 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
   };
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <ScreenChrome>
       <View style={styles.container}>
-        <TouchableOpacity activeOpacity={0.85} onPress={goToDashboard} style={styles.dashboardBackRow}>
-          <Text style={styles.dashboardBackIcon}>←</Text>
-          <Text style={styles.dashboardBackText}>Dashboard</Text>
-        </TouchableOpacity>
+        <Pressable onPress={goToDashboard} style={({ pressed }) => [styles.backRow, pressed && styles.pressed]}>
+          <Text style={styles.backText}>← Dashboard</Text>
+        </Pressable>
 
-        {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.title}>Campaigns</Text>
             <Text style={styles.subtitle}>{agent?.full_name || "Agent"}</Text>
             <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{agent?.role || "agent"}</Text>
+              <Text style={styles.roleBadgeText}>{(agent?.role || "agent").toUpperCase()}</Text>
             </View>
           </View>
-          <TouchableOpacity activeOpacity={0.85} onPress={handleLogout} style={styles.avatar}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sign out"
+            onPress={handleLogout}
+            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+          >
             <Text style={styles.avatarText}>{initials || "AG"}</Text>
-          </TouchableOpacity>
+          </Pressable>
         </View>
 
-        {loading ? (
-          <View style={styles.center}>
-            <ActivityIndicator color={theme.colors.primary} />
-          </View>
-        ) : error ? (
-          <View style={styles.center}>
-            <Text style={styles.error}>{error}</Text>
-            <TouchableOpacity activeOpacity={0.85} onPress={load} style={styles.retryBtn}>
-              <Text style={styles.retryText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
+        {loading || error ? (
+          <StatusPanel loading={loading} error={error} onRetry={load} />
         ) : (
           <FlatList
             data={campaigns}
@@ -116,12 +105,12 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
             columnWrapperStyle={styles.row}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.listContent}
+            ListEmptyComponent={<StatusPanel empty="No campaigns assigned yet." />}
             renderItem={({ item }) => {
               const active = item.status.toLowerCase() === "active";
               return (
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  style={styles.card}
+                <Pressable
+                  style={({ pressed }) => [styles.campaignCard, pressed && styles.pressed]}
                   onPress={() =>
                     navigation.navigate("Leads", { processId: item.id, processName: item.name })
                   }
@@ -129,49 +118,38 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
                   <Text style={styles.cardTitle} numberOfLines={2}>
                     {item.name}
                   </Text>
-
-                  {/* Status badge */}
-                  <View style={[styles.statusBadge, active ? styles.successBadge : styles.neutralBadge]}>
-                    <Text style={[styles.statusText, active ? styles.successText : styles.neutralText]}>
+                  <View style={[styles.statusBadge, active ? styles.statusActive : styles.statusPaused]}>
+                    <Text style={[styles.statusText, active ? styles.statusTextActive : styles.statusTextPaused]}>
                       {active ? "Active" : "Paused"}
                     </Text>
                   </View>
-
-                  {/* Lead count pill — accent ONLY on active, neutral on paused */}
-                  <View style={[styles.leadPill, !active && styles.leadPillNeutral]}>
-                    <Text style={[styles.leadPillText, !active && styles.leadPillTextNeutral]}>
-                      {item.lead_count} leads
-                    </Text>
-                  </View>
-                </TouchableOpacity>
+                  <Text style={styles.leadCount}>{item.lead_count} leads</Text>
+                </Pressable>
               );
             }}
-            ListEmptyComponent={<Text style={styles.empty}>No campaigns found</Text>}
           />
         )}
       </View>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: theme.spacing.screen, paddingTop: theme.spacing.xl },
-  dashboardBackRow: {
-    flexDirection: "row",
-    alignItems: "center",
+  container: {
+    flex: 1,
+    paddingHorizontal: theme.spacing.screen,
+    paddingTop: theme.spacing.xl,
+  },
+  pressed: {
+    opacity: 0.88,
+  },
+  backRow: {
     alignSelf: "flex-start",
-    marginBottom: theme.spacing.md,
+    marginBottom: theme.spacing.lg,
     paddingVertical: theme.spacing.xs,
-    gap: theme.spacing.xs,
   },
-  dashboardBackIcon: {
-    fontSize: theme.fontSize.lg,
-    color: theme.colors.primary,
-    lineHeight: 22,
-  },
-  dashboardBackText: {
-    fontSize: theme.fontSize.base,
+  backText: {
+    fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.primary,
   },
@@ -179,33 +157,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: theme.spacing.xl,
+    marginBottom: theme.spacing.lg,
+    gap: theme.spacing.md,
   },
-  headerLeft: { flex: 1 },
+  headerLeft: {
+    flex: 1,
+    minWidth: 0,
+  },
   title: {
     fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.semibold,
+    fontWeight: theme.fontWeight.bold,
     color: theme.colors.textPrimary,
+    letterSpacing: theme.letterSpacing.tight,
   },
   subtitle: {
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
     fontSize: theme.fontSize.base,
     color: theme.colors.textSecondary,
   },
   roleBadge: {
     marginTop: theme.spacing.sm,
     alignSelf: "flex-start",
-    backgroundColor: theme.colors.muted,
+    backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-    borderWidth: 1,
-    borderColor: "rgba(107,114,128,0.12)",
+    paddingVertical: 4,
   },
   roleBadgeText: {
-    fontSize: theme.fontSize.sm,
+    fontSize: theme.fontSize.xs,
     color: theme.colors.textSecondary,
-    fontWeight: theme.fontWeight.medium,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: theme.letterSpacing.caps,
   },
   avatar: {
     width: 40,
@@ -218,70 +200,61 @@ const styles = StyleSheet.create({
   avatarText: {
     color: theme.colors.card,
     fontWeight: theme.fontWeight.semibold,
-    fontSize: theme.fontSize.base,
+    fontSize: theme.fontSize.sm,
   },
-  center: { flex: 1, alignItems: "center", justifyContent: "center" },
-  error: { color: theme.colors.error, fontSize: theme.fontSize.sm },
-  retryBtn: {
-    marginTop: theme.spacing.md,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.sm,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.primary,
+  listContent: {
+    paddingBottom: theme.spacing["3xl"],
+    flexGrow: 1,
   },
-  retryText: { color: theme.colors.card, fontWeight: theme.fontWeight.medium },
-  listContent: { paddingBottom: theme.spacing["3xl"] },
-  row: { justifyContent: "space-between" },
-  card: {
+  row: {
+    justifyContent: "space-between",
+    gap: theme.spacing.md,
+  },
+  campaignCard: {
     width: "48%",
     backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,       // fixed: xl (24px) per profile
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     padding: theme.spacing.card,
-    marginBottom: theme.spacing.lg,
+    marginBottom: theme.spacing.md,
     ...theme.shadow.card,
   },
   cardTitle: {
     fontSize: theme.fontSize.md,
     fontWeight: theme.fontWeight.semibold,
     color: theme.colors.textPrimary,
-    minHeight: 40,
+    minHeight: 44,
+    lineHeight: 22,
   },
   statusBadge: {
     marginTop: theme.spacing.md,
     alignSelf: "flex-start",
     paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingVertical: 4,
     borderRadius: theme.radius.full,
-    borderWidth: 1,
   },
-  successBadge: { backgroundColor: "#F0FDF4", borderColor: "rgba(16,185,129,0.12)" },
-  neutralBadge: { backgroundColor: theme.colors.muted, borderColor: "rgba(107,114,128,0.12)" },
-  statusText: { fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.medium },
-  successText: { color: theme.colors.success },
-  neutralText: { color: theme.colors.textSecondary },
-  // accent ONLY on active campaigns
-  leadPill: {
-    marginTop: theme.spacing.md,
-    alignSelf: "flex-start",
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.accent,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+  statusActive: {
+    backgroundColor: theme.colors.successSoft,
   },
-  leadPillNeutral: {
-    backgroundColor: theme.colors.muted,
+  statusPaused: {
+    backgroundColor: theme.colors.surfaceMuted,
   },
-  leadPillText: {
+  statusText: {
     fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.bold,
-    color: theme.colors.textPrimary,
+    fontWeight: theme.fontWeight.semibold,
+    letterSpacing: theme.letterSpacing.wide,
   },
-  leadPillTextNeutral: {
+  statusTextActive: {
+    color: theme.colors.success,
+  },
+  statusTextPaused: {
     color: theme.colors.textSecondary,
   },
-  empty: {
+  leadCount: {
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
     color: theme.colors.textSecondary,
-    textAlign: "center",
-    marginTop: theme.spacing.xl,
   },
 });

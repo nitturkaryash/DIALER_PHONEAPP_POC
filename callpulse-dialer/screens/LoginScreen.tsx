@@ -1,17 +1,8 @@
 import React, { useState } from "react";
-import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-} from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { AppCard, PrimaryButton, ScreenChrome, TextField } from "../components/ui";
 import type { RootStackParamList } from "../navigation/types";
 import { login, setToken } from "../services/api";
 import { theme } from "../theme";
@@ -48,60 +39,37 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
   };
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <ScreenChrome>
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
-        <View style={styles.card}>
+        <View style={styles.brandBlock}>
           <Text style={styles.logo}>CallPulse</Text>
-          <Text style={styles.tagline}>Agent Dialer</Text>
+          <Text style={styles.tagline}>Agent dialer for outbound teams</Text>
+        </View>
 
-          <TextInput
+        <AppCard style={styles.card}>
+          <TextField
+            label="Email"
             value={email}
             onChangeText={setEmail}
-            style={styles.input}
             autoCapitalize="none"
             keyboardType="email-address"
-            placeholder="Email"
-            placeholderTextColor={theme.colors.textTertiary}
+            placeholder="you@company.com"
           />
-          <TextInput
+          <TextField
+            label="Password"
             value={password}
             onChangeText={setPassword}
-            style={styles.input}
             secureTextEntry
-            placeholder="Password"
-            placeholderTextColor={theme.colors.textTertiary}
+            placeholder="Enter password"
+            error={error || undefined}
           />
-          {!!error && <Text style={styles.error}>{error}</Text>}
 
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={onSubmit}
-            disabled={loading}
-            style={styles.buttonWrap}
-          >
-            <LinearGradient
-              colors={theme.colors.primaryGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.button}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.colors.card} />
-              ) : (
-                <Text style={styles.buttonText}>Sign In</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+          <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} />
 
-          {DEV_MODE && (
+          {DEV_MODE ? (
             <TouchableOpacity
               style={styles.skipButton}
               onPress={async () => {
@@ -110,74 +78,45 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
                 navigation.replace("MainTabs");
               }}
             >
-              <Text style={styles.skipText}>Skip Login (Dev)</Text>
+              <Text style={styles.skipText}>Skip login (dev)</Text>
             </TouchableOpacity>
-          )}
-        </View>
+          ) : null}
+        </AppCard>
       </KeyboardAvoidingView>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
   container: {
     flex: 1,
     justifyContent: "center",
-    alignItems: "center",
     paddingHorizontal: theme.spacing.screen,
+    paddingVertical: theme.spacing["2xl"],
+    maxWidth: 440,
+    width: "100%",
+    alignSelf: "center",
+  },
+  brandBlock: {
+    marginBottom: theme.spacing.xl,
+  },
+  logo: {
+    fontSize: theme.fontSize.display,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textPrimary,
+    letterSpacing: theme.letterSpacing.tight,
+  },
+  tagline: {
+    marginTop: theme.spacing.sm,
+    fontSize: theme.fontSize.base,
+    color: theme.colors.textSecondary,
+    lineHeight: 22,
   },
   card: {
     width: "100%",
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,
-    padding: theme.spacing.card,
-    ...theme.shadow.card,
-  },
-  logo: {
-    fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.primary,
-    textAlign: "center",
-  },
-  tagline: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.textTertiary,
-    textAlign: "center",
-    marginBottom: theme.spacing.xl,
-    marginTop: theme.spacing.xs,
-  },
-  input: {
-    height: 48,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.lg,
-    color: theme.colors.textPrimary,
-    marginBottom: theme.spacing.md,
-    fontSize: theme.fontSize.base,
-    backgroundColor: "#FAFAFA",
-  },
-  error: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.error,
-    marginBottom: theme.spacing.md,
-  },
-  buttonWrap: { marginTop: theme.spacing.sm },
-  button: {
-    height: 48,
-    borderRadius: theme.radius.full,
-    justifyContent: "center",
-    alignItems: "center",
-    ...theme.shadow.button,
-  },
-  buttonText: {
-    color: theme.colors.card,
-    fontSize: theme.fontSize.base,
-    fontWeight: theme.fontWeight.semibold,
   },
   skipButton: {
-    marginTop: theme.spacing.md,
+    marginTop: theme.spacing.lg,
     alignItems: "center",
     padding: theme.spacing.sm,
   },
