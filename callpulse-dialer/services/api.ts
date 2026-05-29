@@ -20,7 +20,7 @@ import type {
   OutboundCallResponse,
   OutboundCallStatus,
 } from "../types";
-import { DEV_TOKEN, mockAgent, mockCallSession, mockCampaigns, mockLeads } from "./mockData";
+import { DEV_TOKEN, mockAgent, mockCallSession, mockCampaigns, mockLeads, mockDashboardSummary, mockDashboardTrends, mockFailureBreakdown, mockConversionFunnel, mockCallHistory } from "./mockData";
 
 export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
 export const TOKEN_KEY = "callpulse_access_token";
@@ -165,6 +165,7 @@ export async function saveDisposition(
 }
 
 export async function getAgentDashboardSummary(token: string): Promise<AgentDashboardSummary> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockDashboardSummary;
   const response = await request<{ ok: boolean; summary: AgentDashboardSummary }>(
     "/v1/dashboard/agent/summary",
     { method: "GET" },
@@ -174,6 +175,7 @@ export async function getAgentDashboardSummary(token: string): Promise<AgentDash
 }
 
 export async function getAgentDashboardTrends(token: string): Promise<AgentDashboardTrends> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockDashboardTrends;
   const response = await request<{ ok: boolean; trends: AgentDashboardTrends }>(
     "/v1/dashboard/agent/trends",
     { method: "GET" },
@@ -183,6 +185,7 @@ export async function getAgentDashboardTrends(token: string): Promise<AgentDashb
 }
 
 export async function getAgentFailureBreakdown(token: string): Promise<AgentFailureBreakdown> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockFailureBreakdown;
   const response = await request<{ ok: boolean; breakdown: AgentFailureBreakdown }>(
     "/v1/dashboard/agent/failure-breakdown",
     { method: "GET" },
@@ -192,6 +195,7 @@ export async function getAgentFailureBreakdown(token: string): Promise<AgentFail
 }
 
 export async function getAgentConversionFunnel(token: string): Promise<AgentConversionFunnel> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockConversionFunnel;
   const response = await request<{ ok: boolean; funnel: AgentConversionFunnel }>(
     "/v1/dashboard/agent/conversion-funnel",
     { method: "GET" },
@@ -283,6 +287,7 @@ export async function getCallHistory(
   if (params.date_from) query.set("date_from", params.date_from);
   if (params.date_to) query.set("date_to", params.date_to);
 
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockCallHistory;
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return request(`/api/calls/history${suffix}`, { method: "GET" }, token);
 }

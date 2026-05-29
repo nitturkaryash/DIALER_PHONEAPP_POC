@@ -7,7 +7,7 @@ import type { RootStackParamList } from "../navigation/types";
 import { login, setToken } from "../services/api";
 import { theme } from "../theme";
 
-const DEV_MODE = false;
+const DEV_MODE = process.env.EXPO_PUBLIC_ENABLE_DEV_MOCKS === "true";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Login"> & {
   onLoginSuccess: () => void;

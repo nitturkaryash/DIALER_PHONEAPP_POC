@@ -15,6 +15,7 @@ type TabConfig = {
 const TAB_CONFIG: Record<string, TabConfig> = {
   Dashboard: { label: "Home", short: "H" },
   Dial: { label: "Dial", short: "D", emphasize: true },
+  Chats: { label: "Chats", short: "💬" },
   CallHistory: { label: "History", short: "L" },
   Campaigns: { label: "Campaigns", short: "C" },
 };

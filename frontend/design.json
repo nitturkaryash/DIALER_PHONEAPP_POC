@@ -1,109 +1,273 @@
 {
-  "name": "Callivio Dashboard",
-  "version": "1.0.0",
-  "colors": {
-    "primary": "#6FA3D2",
-    "primaryGradientStart": "#6FA3D2",
-    "primaryGradientEnd": "#89B9E3",
-    "accent": "#C3E836",
-    "background": "#F5F5F7",
-    "card": "#FFFFFF",
-    "textPrimary": "#1A1A1A",
-    "textSecondary": "#6B7280",
-    "textTertiary": "#9CA3AF",
-    "success": "#10B981",
-    "error": "#EF4444",
-    "warning": "#F59E0B",
-    "border": "#E5E7EB"
+  "profile_name": "soft_minimal_mobile_messaging_ui",
+  "source_type": "visual_reference_screenshots",
+  "design_intent": "A polished, modern, mobile-first communication app interface with a calm premium feel, strong hierarchy, soft surfaces, rounded geometry, and restrained color accents.",
+  "core_style_attributes": {
+    "aesthetic": [
+      "minimal",
+      "friendly",
+      "premium",
+      "clean",
+      "soft",
+      "human-centered"
+    ],
+    "layout_language": [
+      "mobile card-based layout",
+      "large top header area",
+      "content stacked vertically",
+      "floating primary action emphasis",
+      "bottom navigation anchored"
+    ],
+    "visual_mood": [
+      "calm",
+      "approachable",
+      "organized",
+      "modern",
+      "lightly playful"
+    ]
   },
-  "typography": {
-    "fontSize": {
-      "xs": 11,
-      "sm": 12,
-      "base": 14,
-      "md": 16,
-      "lg": 18,
-      "xl": 24,
-      "2xl": 32
+  "design_system": {
+    "color_system": {
+      "primary": {
+        "description": "deep muted green used for active surfaces, emphasis, and selected states",
+        "usage": ["top app header", "active chat bubbles", "selected icons", "primary emphasis surfaces"]
+      },
+      "secondary": {
+        "description": "soft mint / pale green used for supportive message bubbles and subtle highlights",
+        "usage": ["incoming message surfaces", "soft accent backgrounds", "secondary highlights"]
+      },
+      "accent": {
+        "description": "warm sand / beige used for floating primary action and special emphasis",
+        "usage": ["central floating action button", "highlight chips", "call-to-action elements"]
+      },
+      "neutral": {
+        "background": "warm off-white / very light gray",
+        "surface": "pure white",
+        "text_primary": "near-black",
+        "text_secondary": "muted gray",
+        "divider": "very light gray"
+      },
+      "status": {
+        "online": "bright green dot",
+        "unread": "soft beige badge",
+        "success": "green-tinted confirmation",
+        "inactive": "low-contrast gray"
+      }
     },
-    "fontWeight": {
-      "light": 300,
-      "regular": 400,
-      "medium": 500,
-      "semibold": 600,
-      "bold": 700
+    "typography": {
+      "font_character": "modern sans-serif",
+      "hierarchy": [
+        "large bold screen title",
+        "medium semibold contact names",
+        "small regular message previews",
+        "tiny muted metadata like time and date"
+      ],
+      "characteristics": [
+        "high readability",
+        "tight but breathable line heights",
+        "minimal decorative treatment",
+        "strong contrast between title and metadata"
+      ]
+    },
+    "shape_language": {
+      "corners": [
+        "large rounded container corners",
+        "fully rounded pills",
+        "circular avatars",
+        "soft pill buttons"
+      ],
+      "geometry": [
+        "organic rounded rectangles",
+        "floating circular action elements",
+        "rounded tabs and chips"
+      ]
+    },
+    "spacing": {
+      "principles": [
+        "generous outer padding",
+        "clear vertical rhythm",
+        "consistent row spacing",
+        "comfortable whitespace around content"
+      ],
+      "density": "medium-light, allowing elements to breathe"
+    },
+    "depth_and_elevation": {
+      "shadow_style": [
+        "soft diffuse shadows",
+        "subtle lifted cards",
+        "minimal hard edges"
+      ],
+      "surface_layers": [
+        "primary frame",
+        "header panel",
+        "white content sheet",
+        "floating action layer"
+      ]
+    },
+    "iconography": {
+      "style": [
+        "simple line icons",
+        "thin stroke weight",
+        "minimal fill",
+        "rounded visual language"
+      ],
+      "usage": [
+        "search",
+        "call actions",
+        "settings",
+        "more options",
+        "navigation"
+      ]
     }
   },
-  "spacing": {
-    "xs": 4,
-    "sm": 8,
-    "md": 12,
-    "lg": 16,
-    "xl": 24,
-    "2xl": 32,
-    "3xl": 48,
-    "4xl": 64
+  "layout_rules": {
+    "screen_structure": [
+      "status bar at the top",
+      "compact app header with title or contact context",
+      "search or action area below header",
+      "primary content area in scrollable list form",
+      "persistent bottom navigation"
+    ],
+    "content_patterns": [
+      "list rows with avatar, title, subtitle, and metadata",
+      "message bubbles aligned by sender",
+      "badge indicators for unread or state",
+      "sticky floating action button centered near bottom"
+    ],
+    "alignment_rules": [
+      "left-align most content",
+      "right-align metadata where helpful",
+      "center major floating actions",
+      "keep icons aligned to row edges"
+    ]
   },
-  "radius": {
-    "sm": 4,
-    "base": 8,
-    "md": 12,
-    "lg": 16,
-    "xl": 24,
-    "full": 9999
-  },
-  "card": {
-    "background": "#FFFFFF",
-    "radius": 16,
-    "padding": 24,
-    "shadow": "0 2px 12px rgba(0,0,0,0.06)",
-    "hoverShadow": "0 4px 20px rgba(0,0,0,0.10)",
-    "transition": "all 250ms ease"
-  },
-  "buttons": {
-    "primary": {
-      "gradientAngle": 135,
-      "gradientStart": "#6FA3D2",
-      "gradientEnd": "#89B9E3",
-      "textColor": "#FFFFFF",
-      "radius": 8
+  "component_system": {
+    "app_header": {
+      "structure": [
+        "large title or contact identity",
+        "optional action icons on the right",
+        "minimal top spacing",
+        "rounded lower edge if connected to a colored header block"
+      ],
+      "behavior": [
+        "supports contextual screen titles",
+        "can switch between list mode and conversation mode"
+      ]
     },
-    "secondary": {
-      "background": "#FFFFFF",
-      "textColor": "#6B7280",
-      "borderColor": "#E5E7EB"
+    "search_bar": {
+      "shape": "rounded pill",
+      "contrast": "slightly lighter than surrounding header",
+      "icon_position": "left inside field",
+      "behavior": "soft shadow or inset-like feel"
     },
-    "call": {
-      "background": "#C3E836",
-      "textColor": "#1A1A1A",
-      "radius": 12
+    "avatar_system": {
+      "shape": "circular",
+      "size_scale": ["small", "medium", "large"],
+      "status_layer": "tiny presence dot overlay when active",
+      "grouping": "horizontal row for recent contacts or participants"
     },
-    "danger": {
-      "background": "#EF4444",
-      "textColor": "#FFFFFF",
-      "shape": "circle"
+    "list_item": {
+      "structure": [
+        "avatar",
+        "primary label",
+        "secondary preview line",
+        "right-side timestamp",
+        "optional unread badge"
+      ],
+      "states": [
+        "default",
+        "unread",
+        "selected",
+        "swiped_action"
+      ]
+    },
+    "chat_bubble": {
+      "incoming": {
+        "shape": "rounded rectangle with soft corners",
+        "color": "light mint or pale neutral",
+        "alignment": "left"
+      },
+      "outgoing": {
+        "shape": "rounded rectangle with soft corners",
+        "color": "deep muted green",
+        "alignment": "right"
+      },
+      "metadata": [
+        "small timestamp",
+        "delivery/read indicator",
+        "subtle spacing between message groups"
+      ]
+    },
+    "bottom_navigation": {
+      "structure": [
+        "4 to 5 icons",
+        "active icon highlighted with color and stronger contrast",
+        "center floating action button above nav line",
+        "inactive icons low contrast"
+      ],
+      "behavior": [
+        "persistent across screens",
+        "primary action visually separated from navigation"
+      ]
+    },
+    "floating_action_button": {
+      "shape": "circular",
+      "size": "large",
+      "elevation": "high",
+      "purpose": "primary create/compose action",
+      "placement": "center bottom, overlapping navigation area"
     }
   },
-  "badges": {
-    "success": {
-      "background": "#F0FDF4",
-      "textColor": "#10B981",
-      "borderColor": "#10B98120"
-    },
-    "error": {
-      "background": "#FEE2E2",
-      "textColor": "#EF4444",
-      "borderColor": "#EF444420"
-    },
-    "neutral": {
-      "background": "#F3F4F6",
-      "textColor": "#6B7280",
-      "borderColor": "#6B728020"
-    },
-    "warning": {
-      "background": "#FEF3C7",
-      "textColor": "#F59E0B",
-      "borderColor": "#F59E0B20"
-    }
-  }
+  "interaction_patterns": {
+    "motion_tone": [
+      "smooth",
+      "subtle",
+      "non-bouncy",
+      "premium-feeling transitions"
+    ],
+    "microinteractions": [
+      "soft press states",
+      "fade transitions for active selections",
+      "badge appear/disappear",
+      "swipe actions on list items"
+    ],
+    "focus_behavior": [
+      "active element becomes slightly darker or more saturated",
+      "selected tab has stronger visual weight",
+      "input focus uses soft outline or glow"
+    ]
+  },
+  "responsive_guidance": {
+    "primary_target": "mobile portrait",
+    "scale_rules": [
+      "preserve generous spacing on small screens",
+      "keep header compact",
+      "ensure touch targets are large enough",
+      "avoid dense multi-column layouts"
+    ],
+    "safe_area": [
+      "respect top notch/status bar space",
+      "keep bottom actions above gesture area"
+    ]
+  },
+  "implementation_notes": {
+    "for_cursor_context": [
+      "use rounded cards and pill controls everywhere",
+      "prefer soft shadows over borders",
+      "use a muted green primary palette with warm neutral backgrounds",
+      "keep typography simple and highly legible",
+      "make the floating primary action central and prominent",
+      "structure lists with avatar + title + subtitle + metadata",
+      "use light presence indicators and unread badges",
+      "maintain a calm, premium communication-app feel"
+    ],
+    "do_not": [
+      "do not use sharp corners",
+      "do not overuse saturated colors",
+      "do not make layouts dense or cluttered",
+      "do not use heavy gradients",
+      "do not use aggressive outlines or harsh shadows"
+    ]
+  },
+  "generated_usage_prompt": "Replicate a soft, minimal, premium mobile communication UI with deep muted green header surfaces, warm off-white backgrounds, rounded cards, circular avatars, subtle shadows, thin line icons, a centered floating primary action button, and a clear list-based hierarchy. Preserve strong spacing, calm visual rhythm, and lightweight status indicators while keeping all components touch-friendly and modern."
 }

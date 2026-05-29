@@ -4,6 +4,7 @@ import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
 import DashboardScreen from "../screens/DashboardScreen";
 import DialerScreen from "../screens/DialerScreen";
 import CallHistoryScreen from "../screens/CallHistoryScreen";
+import ChatsScreen from "../screens/ChatsScreen";
 import AppTabBar from "./AppTabBar";
 import CampaignsStack from "./CampaignsStack";
 import type { MainTabParamList } from "./types";
@@ -28,6 +29,7 @@ export default function MainTabNavigator({ onLoggedOut }: Props) {
         {(props) => <DashboardScreen {...props} onLoggedOut={onLoggedOut} />}
       </Tab.Screen>
       <Tab.Screen name="Dial" component={DialerScreen} />
+      <Tab.Screen name="Chats" component={ChatsScreen} />
       <Tab.Screen name="CallHistory" component={CallHistoryScreen} />
       <Tab.Screen name="Campaigns">{() => <CampaignsStack onLoggedOut={onLoggedOut} />}</Tab.Screen>
     </Tab.Navigator>

@@ -10,6 +10,7 @@ export type CampaignsStackParamList = {
 export type MainTabParamList = {
   Dashboard: undefined;
   Dial: undefined;
+  Chats: undefined;
   CallHistory: undefined;
   Campaigns: NavigatorScreenParams<CampaignsStackParamList> | undefined;
 };
@@ -37,5 +38,12 @@ export type RootStackParamList = {
   };
   CallHistoryDetail: {
     callId: string;
+  };
+  ChatDetail: {
+    contactId: string;
+    contactName: string;
+    contactPhone: string;
+    contactInitials: string;
+    contactOnline: boolean;
   };
 };
