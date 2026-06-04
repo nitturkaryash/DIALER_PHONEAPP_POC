@@ -38,13 +38,9 @@ import {
   mockPauseCodes,
 } from "./mockData";
 
-// ─── Configuration ──────────────────────────────────────────────────────────
+import { BASE_URL, COMMONS_URL } from "../config/network";
 
-/** Voice-Assisstant-Backend base URL (all calling, campaign, history, agent-status APIs). */
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
-
-/** Qualia-Commons-Backend base URL (login / refresh / me). */
-export const COMMONS_URL = process.env.EXPO_PUBLIC_COMMONS_API_URL ?? "http://localhost:4100";
+export { BASE_URL, COMMONS_URL };
 
 export const TOKEN_KEY = "callpulse_access_token";
 export const REFRESH_TOKEN_KEY = "callpulse_refresh_token";

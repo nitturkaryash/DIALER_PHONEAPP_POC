@@ -174,7 +174,7 @@ export default function DialerScreen() {
             <View style={styles.infoBanner}>
               <Feather name="info" size={16} color={theme.colors.primary} />
               <Text style={styles.infoBannerText}>
-                Native live audio needs an EAS dev build (Expo Go won't link the WebRTC module).
+                Live calls need an EAS dev build with Commons PCM modules (not Expo Go).
               </Text>
             </View>
           ) : null}

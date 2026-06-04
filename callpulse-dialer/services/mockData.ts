@@ -70,6 +70,7 @@ export function mockOutboundCallStatus(callId: string): OutboundCallStatus {
     status: "in_progress",
     phone_number: "+10000000000",
     handler: "human",
+    agent_bridge_ready: true,
     started_at: new Date(Date.now() - 5000).toISOString(),
   };
 }

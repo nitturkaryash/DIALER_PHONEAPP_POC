@@ -4,8 +4,14 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { useWebRTCAgentCall } from "../hooks/useWebRTCAgentCall";
+import {
+  HumanCallAudioBridge,
+  transportTipLabel,
+  type HumanCallAudioState,
+} from "../components/HumanCallAudioBridge";
+import { METRO_URL } from "../config/network";
 import type { RootStackParamList } from "../navigation/types";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { theme } from "../theme";
 import type { Lead } from "../types";
 
@@ -35,12 +41,33 @@ const STATE_DOT: Record<string, string> = {
 
 export default function HumanCallScreen({ route, navigation }: Props) {
   const { callId, phone, customerName } = route.params;
+  return (
+    <HumanCallAudioBridge callId={callId}>
+      {(audio) => (
+        <HumanCallScreenBody
+          callId={callId}
+          phone={phone}
+          customerName={customerName}
+          navigation={navigation}
+          audio={audio}
+        />
+      )}
+    </HumanCallAudioBridge>
+  );
+}
+
+type BodyProps = {
+  callId: string;
+  phone: string;
+  customerName: string;
+  navigation: NativeStackNavigationProp<RootStackParamList, "HumanCall">;
+  audio: HumanCallAudioState;
+};
+
+function HumanCallScreenBody({ callId, phone, customerName, navigation, audio }: BodyProps) {
+  const { connectionState, callStatus, muted, error, toggleMute, hangup, transport } = audio;
   const [elapsed, setElapsed] = useState(0);
   const [ending, setEnding] = useState(false);
-
-  const { connectionState, callStatus, muted, error, toggleMute, hangup } = useWebRTCAgentCall({
-    callId,
-  });
 
   useEffect(() => {
     const timer = setInterval(() => setElapsed((s) => s + 1), 1000);
@@ -58,9 +85,8 @@ export default function HumanCallScreen({ route, navigation }: Props) {
     [customerName]
   );
 
-  // With WebRTC, native CAN work — but only in EAS dev builds, not in Expo Go.
-  // The hook reports `unavailable` if it can't load the native module.
-  const isNativeUnavailable = connectionState === "unavailable";
+  const isNativeUnavailable =
+    connectionState === "unavailable" || transport === "unavailable";
 
   const headerLabel = useMemo(() => {
     if (isNativeUnavailable) return "Call in progress on backend";
@@ -76,8 +102,10 @@ export default function HumanCallScreen({ route, navigation }: Props) {
       if (["completed", "ended"].includes(normalized)) return "Call ended";
       return formatStatusLabel(callStatus);
     }
+    const ringing = ["queued", "ringing"].includes(callStatus.toLowerCase());
+    if (connectionState === "waiting" && ringing) return "Ringing… mic is being prepared";
     if (connectionState === "waiting") return `Waiting · ${formatStatusLabel(callStatus)}`;
-    if (connectionState === "connecting") return "Connecting your microphone…";
+    if (connectionState === "connecting") return "Customer answered — connecting your mic…";
     if (connectionState === "error") return "Audio bridge error";
     if (connectionState === "connected") return "Connected";
     return formatStatusLabel(callStatus);
@@ -136,11 +164,11 @@ export default function HumanCallScreen({ route, navigation }: Props) {
           <View style={styles.platformNotice}>
             <Text style={styles.platformNoticeTitle}>📱 Dev build chahiye</Text>
             <Text style={styles.platformNoticeBody}>
-              Backend audio bridge ready hai aur customer connect ho gaya hai — par Expo Go
-              react-native-webrtc native module load nahi kar sakta. Phone pe live calls ke liye
-              ek **EAS development build** banao (one-time setup).{"\n\n"}
+              Live agent audio ke liye **EAS dev build** chahiye (Expo Go PCM modules load nahi
+              karta).{"\n\n"}
               Abhi demo ke liye laptop browser kholo:{"\n"}
-              <Text style={styles.platformNoticeUrl}>http://localhost:8081</Text>{"\n\n"}
+              <Text style={styles.platformNoticeUrl}>{METRO_URL}</Text>
+              {"\n\n"}
               Yahan se "End call" daba ke bridge close karo so customer ka silence call nahi rahega.
             </Text>
           </View>
@@ -152,7 +180,8 @@ export default function HumanCallScreen({ route, navigation }: Props) {
         ) : connectionState === "connected" ? (
           <View style={styles.tipCard}>
             <Text style={styles.tipText}>
-              🎙️ Speak into your microphone — customer audio plays automatically.
+              🎙️{" "}
+              {transportTipLabel(transport)} Customer audio plays automatically.
             </Text>
           </View>
         ) : (

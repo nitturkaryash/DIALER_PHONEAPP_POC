@@ -145,6 +145,8 @@ export type OutboundCallStatus = {
   status: string;
   phone_number: string;
   handler?: string | null;
+  /** True when Issabel/Exotel human bridge is up — safe to open agent-audio WebSocket. */
+  agent_bridge_ready?: boolean;
   call_requested_at?: string | null;
   sip_joined_at?: string | null;
   first_bot_audio_at?: string | null;

@@ -6,13 +6,13 @@
   "scripts": {
     "start": "npx expo start",
     "dev": "npx expo start",
+    "dev:phone": "bash scripts/dev-phone.sh",
+    "dev:tunnel": "npx expo start --dev-client --tunnel",
     "android": "npx expo start --android",
     "ios": "npx expo start --ios",
     "web": "npx expo start --web"
   },
   "dependencies": {
-    "@livekit/react-native": "^2.10.3",
-    "@livekit/react-native-webrtc": "^144.0.0",
     "@react-navigation/bottom-tabs": "^7.16.1",
     "@react-navigation/native": "^7.0.14",
     "@react-navigation/native-stack": "^7.2.0",
@@ -26,10 +26,11 @@
     "expo-linear-gradient": "~15.0.8",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
-    "livekit-client": "^2.19.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",
+    "react-native-audio-api": "^0.10.3",
+    "react-native-audio-record": "^0.2.2",
     "react-native-gesture-handler": "~2.28.0",
     "react-native-safe-area-context": "~5.6.0",
     "react-native-screens": "~4.16.0",
