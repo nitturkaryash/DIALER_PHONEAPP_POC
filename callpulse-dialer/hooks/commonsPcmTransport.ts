@@ -5,6 +5,14 @@ import { Platform } from "react-native";
 /** Same 16 kHz mono PCM as Qualia Commons web dialer. */
 export const COMMONS_PCM_SAMPLE_RATE = 16000;
 
+/**
+ * Customer → agent playback boost on native (earpiece + music stream mismatch is quieter than web).
+ */
+export const NATIVE_CUSTOMER_PLAYBACK_GAIN = 2.75;
+
+/** ~60 ms of 16 kHz mono before scheduling one buffer (smoother than per-RTP-packet on mobile). */
+export const NATIVE_PLAYBACK_JITTER_SAMPLES = 960;
+
 let nativeModulesOk: boolean | null = null;
 
 /**
@@ -83,14 +91,17 @@ const NATIVE_MIC_INIT = {
   wavFile: "",
 } as const;
 
-/** Phone-call audio route: earpiece + duck others → less speaker→mic echo than loudspeaker. */
+/**
+ * Phone-call audio route: MODE_IN_COMMUNICATION on Android (pairs with VOICE_COMMUNICATION mic).
+ * Earpiece keeps echo down; customer playback gain is boosted separately in useAgentAudioWebSocket.
+ */
 export async function configureNativeCallAudio(): Promise<void> {
   if (Platform.OS === "web") return;
   try {
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
       playsInSilentModeIOS: true,
-      staysActiveInBackground: false,
+      staysActiveInBackground: true,
       shouldDuckAndroid: true,
       playThroughEarpieceAndroid: true,
       interruptionModeAndroid: InterruptionModeAndroid.DuckOthers,

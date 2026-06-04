@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
+
+import { ScreenChrome } from "../components/ui";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { CampaignsStackParamList } from "../navigation/types";
@@ -65,12 +66,7 @@ export default function LeadsScreen({ route, navigation }: Props) {
   };
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <ScreenChrome>
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity
@@ -166,13 +162,12 @@ export default function LeadsScreen({ route, navigation }: Props) {
           />
         )}
       </View>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  container: { flex: 1, paddingHorizontal: theme.spacing.screen, paddingTop: theme.spacing.xl },
+  container: { flex: 1, paddingHorizontal: theme.spacing.screen, paddingTop: theme.spacing.lg },
   header: {
     flexDirection: "row",
     alignItems: "center",
@@ -232,12 +227,14 @@ const styles = StyleSheet.create({
   listContent: { paddingBottom: theme.spacing["3xl"] },
   card: {
     backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,
+    borderRadius: theme.radius.lg,
     padding: theme.spacing.card,
     marginBottom: theme.spacing.md,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   cardLeft: { flex: 1, marginRight: theme.spacing.md },

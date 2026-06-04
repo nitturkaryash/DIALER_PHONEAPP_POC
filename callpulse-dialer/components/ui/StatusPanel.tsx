@@ -1,5 +1,6 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 import { theme } from "../../theme";
 import { PrimaryButton } from "./PrimaryButton";
@@ -16,6 +17,7 @@ export function StatusPanel({ loading, error, onRetry, empty }: Props) {
     return (
       <View style={styles.center}>
         <ActivityIndicator color={theme.colors.primary} size="large" />
+        <Text style={styles.loadingText}>Loading…</Text>
       </View>
     );
   }
@@ -23,9 +25,14 @@ export function StatusPanel({ loading, error, onRetry, empty }: Props) {
   if (error) {
     return (
       <View style={styles.panel}>
+        <View style={styles.iconCircle}>
+          <Feather name="alert-circle" size={24} color={theme.colors.error} />
+        </View>
         <Text style={styles.errorTitle}>Could not load</Text>
         <Text style={styles.errorBody}>{error}</Text>
-        {onRetry ? <PrimaryButton label="Try again" onPress={onRetry} variant="secondary" style={styles.retry} /> : null}
+        {onRetry ? (
+          <PrimaryButton label="Try again" onPress={onRetry} variant="secondary" style={styles.retry} />
+        ) : null}
       </View>
     );
   }
@@ -33,6 +40,9 @@ export function StatusPanel({ loading, error, onRetry, empty }: Props) {
   if (empty) {
     return (
       <View style={styles.panel}>
+        <View style={[styles.iconCircle, styles.iconCircleMuted]}>
+          <Feather name="inbox" size={24} color={theme.colors.textTertiary} />
+        </View>
         <Text style={styles.empty}>{empty}</Text>
       </View>
     );
@@ -47,6 +57,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: theme.spacing["3xl"],
+    gap: theme.spacing.md,
+  },
+  loadingText: {
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textSecondary,
   },
   panel: {
     flex: 1,
@@ -54,6 +69,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: theme.spacing.xl,
     paddingVertical: theme.spacing["2xl"],
+  },
+  iconCircle: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: theme.colors.errorSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: theme.spacing.md,
+  },
+  iconCircleMuted: {
+    backgroundColor: theme.colors.surfaceMuted,
   },
   errorTitle: {
     fontSize: theme.fontSize.md,
@@ -76,5 +103,6 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.base,
     color: theme.colors.textSecondary,
     textAlign: "center",
+    lineHeight: 22,
   },
 });

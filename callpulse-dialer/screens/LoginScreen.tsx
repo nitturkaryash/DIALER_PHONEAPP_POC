@@ -1,8 +1,16 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  Platform,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
-import { AppCard, PrimaryButton, ScreenChrome, TextField } from "../components/ui";
+import { AppCard, BrandMark, PrimaryButton, ScreenChrome, TextField } from "../components/ui";
 import type { RootStackParamList } from "../navigation/types";
 import { login, setRefreshToken, setToken } from "../services/api";
 import { theme } from "../theme";
@@ -43,16 +51,25 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
 
   return (
     <ScreenChrome>
+      <LinearGradient
+        colors={[theme.colors.primary, theme.colors.heroGradient[1]]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.heroBand}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         style={styles.container}
       >
         <View style={styles.brandBlock}>
-          <Text style={styles.logo}>CallPulse</Text>
-          <Text style={styles.tagline}>Agent dialer for outbound teams</Text>
+          <BrandMark size="lg" />
+          <Text style={styles.heroCopy}>
+            Sign in to place calls, manage campaigns, and reply on WhatsApp — all in one app.
+          </Text>
         </View>
 
         <AppCard style={styles.card}>
+          <Text style={styles.cardTitle}>Welcome back</Text>
           <TextField
             label="Email"
             value={email}
@@ -70,7 +87,7 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
             error={error || undefined}
           />
 
-          <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} />
+          <PrimaryButton label="Sign in" onPress={onSubmit} loading={loading} size="lg" />
 
           {DEV_MODE ? (
             <TouchableOpacity
@@ -91,6 +108,15 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
 }
 
 const styles = StyleSheet.create({
+  heroBand: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 200,
+    borderBottomLeftRadius: theme.radius["2xl"],
+    borderBottomRightRadius: theme.radius["2xl"],
+  },
   container: {
     flex: 1,
     justifyContent: "center",
@@ -102,21 +128,22 @@ const styles = StyleSheet.create({
   },
   brandBlock: {
     marginBottom: theme.spacing.xl,
+    paddingTop: theme.spacing.md,
   },
-  logo: {
-    fontSize: theme.fontSize.display,
-    fontWeight: theme.fontWeight.bold,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.letterSpacing.tight,
-  },
-  tagline: {
-    marginTop: theme.spacing.sm,
+  heroCopy: {
+    marginTop: theme.spacing.lg,
     fontSize: theme.fontSize.base,
     color: theme.colors.textSecondary,
-    lineHeight: 22,
+    lineHeight: 24,
   },
   card: {
     width: "100%",
+  },
+  cardTitle: {
+    fontSize: theme.fontSize.lg,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.lg,
   },
   skipButton: {
     marginTop: theme.spacing.lg,
@@ -125,7 +152,7 @@ const styles = StyleSheet.create({
   },
   skipText: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.textTertiary,
-    textDecorationLine: "underline",
+    color: theme.colors.primary,
+    fontWeight: theme.fontWeight.medium,
   },
 });

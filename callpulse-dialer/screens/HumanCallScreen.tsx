@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -132,12 +131,7 @@ function HumanCallScreenBody({ callId, phone, customerName, navigation, audio }:
   };
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
+    <View style={styles.gradient}>
       <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <View style={[styles.statusDot, { backgroundColor: STATE_DOT[connectionState] || theme.colors.textTertiary }]} />
@@ -235,12 +229,12 @@ function HumanCallScreenBody({ callId, phone, customerName, navigation, audio }:
           </TouchableOpacity>
         </View>
       </ScrollView>
-    </LinearGradient>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
+  gradient: { flex: 1, backgroundColor: theme.colors.bg },
   scroll: {
     flexGrow: 1,
     alignItems: "center",
@@ -273,13 +267,15 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xl,
   },
   avatar: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
+    width: 104,
+    height: 104,
+    borderRadius: 52,
     backgroundColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
     marginBottom: theme.spacing.md,
+    borderWidth: 4,
+    borderColor: theme.colors.card,
     ...theme.shadow.button,
   },
   avatarText: { fontSize: 32, fontWeight: "700", color: "#fff" },

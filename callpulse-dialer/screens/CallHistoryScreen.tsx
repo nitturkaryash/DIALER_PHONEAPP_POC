@@ -9,9 +9,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 
+import { EmptyState, ScreenChrome, ScreenHeader } from "../components/ui";
 import { useRootNavigation } from "../navigation/useRootNavigation";
 import type { MainTabParamList } from "../navigation/types";
 import { AuthError, clearToken, getCallHistory, getToken } from "../services/api";
@@ -123,10 +124,9 @@ export default function CallHistoryScreen({}: Props) {
   }, [summary]);
 
   return (
-    <LinearGradient colors={theme.colors.backgroundGradient} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.gradient}>
+    <ScreenChrome>
       <View style={styles.container}>
-        <Text style={styles.title}>Call History</Text>
-        <Text style={styles.subtitle}>Track outcomes, duration, and recent activity.</Text>
+        <ScreenHeader title="Call history" subtitle="Outcomes, duration, and recent activity" />
 
         <View style={styles.summaryRow}>
           <View style={styles.metricCard}>
@@ -144,17 +144,18 @@ export default function CallHistoryScreen({}: Props) {
         </View>
 
         <View style={styles.searchWrap}>
+          <Feather name="search" size={18} color={theme.colors.textTertiary} />
           <TextInput
             value={searchInput}
             onChangeText={setSearchInput}
             onSubmitEditing={() => setSearchQuery(searchInput)}
-            placeholder="Search phone, customer, or call id"
+            placeholder="Phone, customer, or call ID"
             placeholderTextColor={theme.colors.textTertiary}
             style={styles.searchInput}
             returnKeyType="search"
           />
           <TouchableOpacity style={styles.searchButton} onPress={() => setSearchQuery(searchInput)} activeOpacity={0.9}>
-            <Text style={styles.searchButtonText}>Search</Text>
+            <Text style={styles.searchButtonText}>Go</Text>
           </TouchableOpacity>
         </View>
 
@@ -225,41 +226,34 @@ export default function CallHistoryScreen({}: Props) {
                 </TouchableOpacity>
               ) : null
             }
-            ListEmptyComponent={<Text style={styles.emptyText}>No call history found for this filter.</Text>}
+            ListEmptyComponent={
+              <EmptyState icon="phone-off" message="No calls match this filter. Try another status or search." />
+            }
           />
         )}
       </View>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
   container: {
     flex: 1,
     paddingHorizontal: theme.spacing.screen,
-    paddingTop: theme.spacing.xl,
-  },
-  title: {
-    fontSize: theme.fontSize.xl,
-    color: theme.colors.textPrimary,
-    fontWeight: "600",
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.textSecondary,
+    paddingTop: theme.spacing.lg,
   },
   summaryRow: {
-    marginTop: theme.spacing.lg,
+    marginTop: 0,
     flexDirection: "row",
     gap: theme.spacing.sm,
   },
   metricCard: {
     flex: 1,
     backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,
+    borderRadius: theme.radius.lg,
     padding: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   metricLabel: {
@@ -277,10 +271,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+    height: 48,
     alignItems: "center",
     gap: theme.spacing.sm,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   searchInput: {
@@ -289,16 +285,15 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.base,
   },
   searchButton: {
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.primary,
     borderRadius: theme.radius.full,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
   searchButtonText: {
-    color: theme.colors.textPrimary,
+    color: theme.colors.card,
     fontSize: theme.fontSize.sm,
-    fontWeight: "600",
-    textTransform: "capitalize",
+    fontWeight: theme.fontWeight.semibold,
   },
   filterRow: {
     marginTop: theme.spacing.md,
@@ -331,8 +326,10 @@ const styles = StyleSheet.create({
   },
   rowCard: {
     backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,
+    borderRadius: theme.radius.lg,
     padding: theme.spacing.card,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   rowTop: {

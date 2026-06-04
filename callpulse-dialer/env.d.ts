@@ -6,6 +6,7 @@ declare const process: {
     EXPO_PUBLIC_API_URL?: string;
     EXPO_PUBLIC_COMMONS_API_URL?: string;
     EXPO_PUBLIC_ENABLE_DEV_MOCKS?: string;
+    EXPO_PUBLIC_ULTRACHAT_API_URL?: string;
     [key: string]: string | undefined;
   };
 };

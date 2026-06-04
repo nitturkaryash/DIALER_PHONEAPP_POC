@@ -1,5 +1,6 @@
 import React from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 
 import { useAgentStatus } from "../state/AgentStatusContext";
 import { theme } from "../theme";
@@ -36,9 +37,9 @@ export default function BreakTimeButton({ onPress, compact = false }: Props) {
         onPress={onPress}
         style={[styles.button, styles.buttonActive, compact && styles.buttonCompact]}
       >
-        <View style={styles.dotActive} />
+        <Feather name="pause-circle" size={14} color={theme.colors.warning} />
         <Text style={styles.activeLabel} numberOfLines={1}>
-          {currentCode?.label || currentCode?.code || "On break"} · {formatElapsed(elapsedSeconds)}
+          {currentCode?.label || currentCode?.code || "Break"} · {formatElapsed(elapsedSeconds)}
         </Text>
       </TouchableOpacity>
     );
@@ -51,7 +52,8 @@ export default function BreakTimeButton({ onPress, compact = false }: Props) {
       onPress={onPress}
       style={[styles.button, styles.buttonIdle, compact && styles.buttonCompact]}
     >
-      <Text style={styles.idleLabel}>Take break</Text>
+      <Feather name="coffee" size={14} color={theme.colors.textSecondary} />
+      <Text style={styles.idleLabel}>Break</Text>
     </TouchableOpacity>
   );
 }
@@ -60,7 +62,7 @@ const styles = StyleSheet.create({
   button: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    gap: theme.spacing.xs,
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
     borderRadius: theme.radius.full,
@@ -78,12 +80,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.warningSoft,
     borderColor: theme.colors.warning,
   },
-  dotActive: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: theme.colors.warning,
-  },
   idleLabel: {
     color: theme.colors.textSecondary,
     fontSize: theme.fontSize.sm,
@@ -93,5 +89,6 @@ const styles = StyleSheet.create({
     color: theme.colors.warning,
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.semibold,
+    maxWidth: 140,
   },
 });

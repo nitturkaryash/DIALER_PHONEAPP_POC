@@ -257,7 +257,7 @@ export async function hangupCall(token: string, callId: string): Promise<{ ok: b
 /** Build the WebSocket URL for the agent's audio bridge on a given call. JWT goes in the query string. */
 export function buildAgentAudioWsUrl(callId: string, token: string): string {
   const wsBase = BASE_URL.replace(/^http/i, "ws");
-  return `${wsBase}/api/calls/${encodeURIComponent(callId)}/agent-audio?token=${encodeURIComponent(token)}`;
+  return `${wsBase}/api/calls/${encodeURIComponent(callId)}/agent-audio?token=${encodeURIComponent(token)}&client=mobile`;
 }
 
 // ─── Dispositions ───────────────────────────────────────────────────────────

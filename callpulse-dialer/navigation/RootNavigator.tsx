@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { ActivityIndicator, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 
 import { getToken } from "../services/api";
@@ -58,8 +58,12 @@ export default function RootNavigator({ onAuthChange }: Props) {
 
   if (loading) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.bg, justifyContent: "center", alignItems: "center" }}>
-        <ActivityIndicator color={theme.colors.primary} />
+      <View style={splashStyles.wrap}>
+        <View style={splashStyles.logo}>
+          <Text style={splashStyles.logoText}>CP</Text>
+        </View>
+        <Text style={splashStyles.title}>CallPulse</Text>
+        <ActivityIndicator color={theme.colors.primary} style={splashStyles.spinner} />
       </View>
     );
   }
@@ -85,3 +89,33 @@ export default function RootNavigator({ onAuthChange }: Props) {
     </Stack.Navigator>
   );
 }
+
+const splashStyles = StyleSheet.create({
+  wrap: {
+    flex: 1,
+    backgroundColor: theme.colors.bg,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  logo: {
+    width: 64,
+    height: 64,
+    borderRadius: 16,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: theme.spacing.md,
+  },
+  logoText: {
+    color: theme.colors.card,
+    fontSize: 24,
+    fontWeight: "700",
+  },
+  title: {
+    fontSize: theme.fontSize.xl,
+    fontWeight: "700",
+    color: theme.colors.textPrimary,
+    marginBottom: theme.spacing.xl,
+  },
+  spinner: { marginTop: theme.spacing.sm },
+});

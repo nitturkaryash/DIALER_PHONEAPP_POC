@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Platform,
   Pressable,
@@ -13,53 +14,35 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
-import { mockChats, formatTime, type ChatContact } from "../services/chatData";
+import { Feather } from "@expo/vector-icons";
+
+import { formatTime, type ChatContact } from "../services/chatData";
+import { fetchUltraChatContacts, formatPhoneDisplay } from "../services/ultrachatChatApi";
+import { ULTRACHAT_BUSINESS_PHONE, ULTRACHAT_DEMO_ENABLED } from "../services/ultrachatConfig";
 import type { RootStackParamList } from "../navigation/types";
+import { theme } from "../theme";
 
-// ── Design tokens (from design.json) ──────────────────────────────────────────
-const C = {
-  headerBg:      "#2E4A3E",   // dark forest green
-  searchBg:      "#3D5C4E",   // slightly lighter green for search bar
-  searchText:    "rgba(255,255,255,0.6)",
-  headerText:    "#FFFFFF",
-  listBg:        "#FFFFFF",   // white sheet
-  rowBg:         "#FFFFFF",
-  rowPressed:    "#F7F8F7",
-  avatarColors:  ["#4A7C6F","#3D6B5C","#5A8A7A","#2E5A4A","#6B9E8F","#4E7A6A"],
-  online:        "#3ECF6C",   // bright green dot
-  unreadBg:      "#E8C99A",   // warm sand badge
-  unreadText:    "#5C3D1A",
-  fabBg:         "#E8C99A",   // warm sand FAB
-  fabText:       "#2E4A3E",
-  textPrimary:   "#111B21",
-  textName:      "#1A2B25",
-  textPreview:   "#8A9E96",
-  textTime:      "#A0ADA8",
-  textTimeUnread:"#2E4A3E",
-  divider:       "#F0F4F2",
-  deleteBtn:     "#2E4A3E",
-};
+const chat = theme.colors.chat;
+const AVATAR_COLORS = ["#4A7C6F", "#3D6B5C", "#5A8A7A", "#2E5A4A", "#6B9E8F", "#4E7A6A"];
 
-const AVATAR_BG = (id: string) =>
-  C.avatarColors[id.charCodeAt(id.length - 1) % C.avatarColors.length];
+const AVATAR_BG = (id: string) => AVATAR_COLORS[id.charCodeAt(id.length - 1) % AVATAR_COLORS.length];
 
 type Nav = NativeStackNavigationProp<RootStackParamList>;
 
-// ── Active-contacts strip (horizontal scroll) ─────────────────────────────────
-function ActiveStrip() {
-  const active = mockChats.filter((c) => c.online);
-  const all = [...active, ...mockChats.filter((c) => !c.online)].slice(0, 7);
+function ActiveStrip({ contacts }: { contacts: ChatContact[] }) {
+  const strip = contacts.slice(0, 7);
+  if (!strip.length) return null;
   return (
     <ScrollView
       horizontal
       showsHorizontalScrollIndicator={false}
       contentContainerStyle={styles.stripContent}
     >
-      {all.map((c) => (
+      {strip.map((c) => (
         <View key={c.id} style={styles.stripItem}>
           <View style={[styles.stripAvatar, { backgroundColor: AVATAR_BG(c.id) }]}>
             <Text style={styles.stripAvatarText}>{c.initials}</Text>
-            {c.online && <View style={styles.stripDot} />}
+            {c.unread > 0 && <View style={styles.stripDot} />}
           </View>
         </View>
       ))}
@@ -67,14 +50,12 @@ function ActiveStrip() {
   );
 }
 
-// ── Chat row ──────────────────────────────────────────────────────────────────
 function ChatRow({ item, onPress }: { item: ChatContact; onPress: () => void }) {
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
     >
-      {/* Avatar */}
       <View style={styles.avatarWrap}>
         <View style={[styles.avatar, { backgroundColor: AVATAR_BG(item.id) }]}>
           <Text style={styles.avatarText}>{item.initials}</Text>
@@ -82,16 +63,20 @@ function ChatRow({ item, onPress }: { item: ChatContact; onPress: () => void }) 
         {item.online && <View style={styles.onlineDot} />}
       </View>
 
-      {/* Body */}
       <View style={styles.rowBody}>
         <View style={styles.rowTop}>
-          <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.rowName} numberOfLines={1}>
+            {item.name}
+          </Text>
           <Text style={[styles.rowTime, item.unread > 0 && styles.rowTimeUnread]}>
             {formatTime(item.lastMessageTime)}
           </Text>
         </View>
         <View style={styles.rowBottom}>
-          <Text style={[styles.rowPreview, item.unread > 0 && styles.rowPreviewBold]} numberOfLines={1}>
+          <Text
+            style={[styles.rowPreview, item.unread > 0 && styles.rowPreviewBold]}
+            numberOfLines={1}
+          >
             {item.lastMessage}
           </Text>
           {item.unread > 0 && (
@@ -105,140 +90,170 @@ function ChatRow({ item, onPress }: { item: ChatContact; onPress: () => void }) 
   );
 }
 
-// ── Screen ────────────────────────────────────────────────────────────────────
 export default function ChatsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<Nav>();
   const [search, setSearch] = useState("");
+  const [contacts, setContacts] = useState<ChatContact[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
-  const filtered = search.trim()
-    ? mockChats.filter(
-        (c) =>
-          c.name.toLowerCase().includes(search.toLowerCase()) ||
-          c.phone.includes(search)
-      )
-    : mockChats;
+  const loadContacts = useCallback(async (query?: string, silent = false) => {
+    try {
+      if (!silent) setLoading(true);
+      setError("");
+      const list = await fetchUltraChatContacts(1, 30, query);
+      setContacts(list);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load chats");
+      if (!silent) setContacts([]);
+    } finally {
+      if (!silent) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const isSearch = Boolean(search.trim());
+    const delay = isSearch ? 400 : 0;
+    const t = setTimeout(() => void loadContacts(search, isSearch), delay);
+    return () => clearTimeout(t);
+  }, [search, loadContacts]);
 
   return (
     <View style={styles.root}>
-      {/* ── Green header section ── */}
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-        {/* Title row */}
         <View style={styles.titleRow}>
           <Text style={styles.title}>Chats</Text>
-          <Pressable style={styles.menuBtn}>
-            <Text style={styles.menuIcon}>⋮</Text>
+          <Pressable style={styles.menuBtn} onPress={() => void loadContacts(search, true)}>
+            <Feather name="refresh-cw" size={20} color="#fff" />
           </Pressable>
         </View>
 
-        {/* Search bar */}
+        {ULTRACHAT_DEMO_ENABLED && (
+          <Text style={styles.demoBanner}>
+            Account: The Connections · WABA {formatPhoneDisplay(ULTRACHAT_BUSINESS_PHONE)}
+            {"\n"}Open a customer from the list below to reply (not this number).
+          </Text>
+        )}
+
         <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>⌕</Text>
+          <Feather name="search" size={18} color="rgba(255,255,255,0.65)" />
           <TextInput
-            style={styles.searchInput}
+            style={[
+              styles.searchInput,
+              Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : null,
+            ]}
             placeholder="Search"
-            placeholderTextColor={C.searchText}
+            placeholderTextColor="rgba(255,255,255,0.55)"
             value={search}
             onChangeText={setSearch}
-            {...(Platform.OS === "web" ? { style: [styles.searchInput, { outlineStyle: "none" } as object] } : {})}
           />
         </View>
 
-        {/* Active contacts strip */}
-        <ActiveStrip />
+        <ActiveStrip contacts={contacts} />
       </View>
 
-      {/* ── White card sheet ── */}
       <View style={styles.sheet}>
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.divider} />}
-          renderItem={({ item }) => (
-            <ChatRow
-              item={item}
-              onPress={() =>
-                navigation.navigate("ChatDetail", {
-                  contactId: item.id,
-                  contactName: item.name,
-                  contactPhone: item.phone,
-                  contactInitials: item.initials,
-                  contactOnline: item.online,
-                })
-              }
-            />
-          )}
-          ListEmptyComponent={
-            <View style={styles.empty}>
-              <Text style={styles.emptyText}>No chats found</Text>
-            </View>
-          }
-        />
+        {loading ? (
+          <View style={styles.centered}>
+            <ActivityIndicator color={chat.header} />
+          </View>
+        ) : error ? (
+          <View style={styles.centered}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={() => void loadContacts(search, false)}>
+              <Text style={styles.retryText}>Tap to retry</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <FlatList
+            data={contacts}
+            keyExtractor={(item) => item.id}
+            showsVerticalScrollIndicator={false}
+            ItemSeparatorComponent={() => <View style={styles.divider} />}
+            renderItem={({ item }) => (
+              <ChatRow
+                item={item}
+                onPress={() =>
+                  navigation.navigate("ChatDetail", {
+                    contactId: item.id,
+                    contactName: item.name,
+                    contactPhone: item.phone,
+                    contactInitials: item.initials,
+                    contactOnline: item.online,
+                  })
+                }
+              />
+            )}
+            ListEmptyComponent={
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>No chats found</Text>
+              </View>
+            }
+          />
+        )}
       </View>
 
-      {/* ── Sand FAB ── */}
       <Pressable
         style={({ pressed }) => [
           styles.fab,
           { bottom: insets.bottom + 72 },
           pressed && styles.fabPressed,
         ]}
-        onPress={() => {}}
+        onPress={() => void loadContacts(search, true)}
+        accessibilityLabel="Refresh chats"
       >
-        <Text style={styles.fabIcon}>+</Text>
+        <Feather name="refresh-cw" size={22} color={chat.unreadText} />
       </Pressable>
     </View>
   );
 }
 
-// ── Styles ────────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: C.headerBg },
-
-  // Header
+  root: { flex: 1, backgroundColor: chat.header },
   header: {
-    backgroundColor: C.headerBg,
-    paddingHorizontal: 20,
+    backgroundColor: chat.header,
+    paddingHorizontal: theme.spacing.screen,
     paddingBottom: 0,
   },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 28,
-    fontWeight: "700",
-    color: C.headerText,
-    letterSpacing: -0.3,
+    fontSize: theme.fontSize["2xl"],
+    fontWeight: theme.fontWeight.bold,
+    color: "#FFFFFF",
+    letterSpacing: theme.letterSpacing.tight,
   },
-  menuBtn: { padding: 4 },
-  menuIcon: { fontSize: 24, color: C.headerText, fontWeight: "700" },
-
+  demoBanner: {
+    fontSize: 11,
+    color: "rgba(255,255,255,0.75)",
+    marginBottom: 10,
+    lineHeight: 16,
+  },
+  menuBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: chat.searchBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: C.searchBg,
-    borderRadius: 24,
-    paddingHorizontal: 16,
-    height: 44,
-    marginBottom: 20,
+    gap: theme.spacing.sm,
+    backgroundColor: chat.searchBg,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.lg,
+    height: 48,
+    marginBottom: theme.spacing.lg,
   },
-  searchIcon: { fontSize: 18, color: C.searchText, marginRight: 10 },
-  searchInput: {
-    flex: 1,
-    fontSize: 15,
-    color: "#FFFFFF",
-  },
-
-  // Active strip
-  stripContent: {
-    paddingBottom: 20,
-    paddingRight: 4,
-    gap: 12,
-  },
+  searchInput: { flex: 1, fontSize: theme.fontSize.base, color: "#FFFFFF" },
+  stripContent: { paddingBottom: 20, paddingRight: 4, gap: 12 },
   stripItem: {},
   stripAvatar: {
     width: 52,
@@ -257,32 +272,30 @@ const styles = StyleSheet.create({
     width: 13,
     height: 13,
     borderRadius: 7,
-    backgroundColor: C.online,
+    backgroundColor: chat.unread,
     borderWidth: 2,
-    borderColor: C.headerBg,
+    borderColor: chat.header,
   },
-
-  // White sheet
   sheet: {
     flex: 1,
-    backgroundColor: C.listBg,
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
+    backgroundColor: chat.sheet,
+    borderTopLeftRadius: theme.radius["2xl"],
+    borderTopRightRadius: theme.radius["2xl"],
     overflow: "hidden",
     paddingTop: 8,
   },
-
-  // Chat row
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  errorText: { fontSize: theme.fontSize.base, color: theme.colors.textSecondary, textAlign: "center", marginBottom: 8 },
+  retryText: { fontSize: theme.fontSize.base, color: chat.header, fontWeight: theme.fontWeight.semibold },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    backgroundColor: C.rowBg,
-    gap: 14,
+    paddingHorizontal: theme.spacing.screen,
+    paddingVertical: theme.spacing.md + 2,
+    backgroundColor: chat.sheet,
+    gap: theme.spacing.md,
   },
-  rowPressed: { backgroundColor: C.rowPressed },
-
+  rowPressed: { backgroundColor: theme.colors.surfaceMuted },
   avatarWrap: { width: 52, height: 52 },
   avatar: {
     width: 52,
@@ -299,11 +312,10 @@ const styles = StyleSheet.create({
     width: 14,
     height: 14,
     borderRadius: 7,
-    backgroundColor: C.online,
+    backgroundColor: chat.online,
     borderWidth: 2.5,
-    borderColor: C.listBg,
+    borderColor: chat.sheet,
   },
-
   rowBody: { flex: 1, minWidth: 0 },
   rowTop: {
     flexDirection: "row",
@@ -312,25 +324,23 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   rowName: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: C.textName,
+    fontSize: theme.fontSize.md,
+    fontWeight: theme.fontWeight.semibold,
+    color: theme.colors.textPrimary,
     flex: 1,
     marginRight: 8,
   },
-  rowTime: { fontSize: 12, color: C.textTime },
-  rowTimeUnread: { color: C.textTimeUnread, fontWeight: "600" },
-
+  rowTime: { fontSize: theme.fontSize.sm, color: theme.colors.textTertiary },
+  rowTimeUnread: { color: chat.header, fontWeight: theme.fontWeight.semibold },
   rowBottom: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
   },
-  rowPreview: { fontSize: 14, color: C.textPreview, flex: 1, marginRight: 8 },
-  rowPreviewBold: { color: C.textPrimary, fontWeight: "500" },
-
+  rowPreview: { fontSize: theme.fontSize.base, color: theme.colors.textSecondary, flex: 1, marginRight: 8 },
+  rowPreviewBold: { color: theme.colors.textPrimary, fontWeight: theme.fontWeight.medium },
   badge: {
-    backgroundColor: C.unreadBg,
+    backgroundColor: chat.unread,
     borderRadius: 12,
     minWidth: 22,
     height: 22,
@@ -338,14 +348,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  badgeText: { fontSize: 12, fontWeight: "700", color: C.unreadText },
-
-  divider: { height: 1, backgroundColor: C.divider, marginLeft: 86 },
-
+  badgeText: { fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.bold, color: chat.unreadText },
+  divider: { height: 1, backgroundColor: theme.colors.border, marginLeft: 86 },
   empty: { alignItems: "center", paddingTop: 60 },
-  emptyText: { fontSize: 15, color: C.textPreview },
-
-  // FAB
+  emptyText: { fontSize: theme.fontSize.base, color: theme.colors.textSecondary },
   fab: {
     position: "absolute",
     alignSelf: "center",
@@ -354,15 +360,10 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: C.fabBg,
+    backgroundColor: chat.unread,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 8,
+    ...theme.shadow.button,
   },
   fabPressed: { opacity: 0.88 },
-  fabIcon: { fontSize: 28, fontWeight: "300", color: C.fabText, lineHeight: 32 },
 });

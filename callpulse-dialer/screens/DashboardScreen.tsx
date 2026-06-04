@@ -12,8 +12,10 @@ import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { CompositeScreenProps } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { LinearGradient } from "expo-linear-gradient";
+
 import BreakTimeButton from "../components/BreakTimeButton";
-import { ScreenChrome } from "../components/ui";
+import { BadgeChip, PrimaryButton, ScreenChrome, ScreenHeader } from "../components/ui";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import {
   AuthError,
@@ -145,20 +147,16 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.colors.primary} />
         }
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Agent Dashboard</Text>
-            <Text style={styles.subtitle}>
-              {agent?.display_name || agent?.full_name || agent?.email || "Agent"}
-            </Text>
-          </View>
-          <View style={styles.headerActions}>
-            <BreakTimeButton onPress={() => navigation.navigate("AgentStatus")} compact />
-            <TouchableOpacity style={styles.headerAction} activeOpacity={0.85} onPress={handleLogout}>
-              <Text style={styles.headerActionText}>Logout</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
+        <ScreenHeader
+          title="Home"
+          subtitle={agent?.display_name || agent?.full_name || agent?.email || "Agent"}
+          right={
+            <>
+              <BreakTimeButton onPress={() => navigation.navigate("AgentStatus")} compact />
+              <PrimaryButton label="Logout" onPress={handleLogout} variant="ghost" />
+            </>
+          }
+        />
 
         {loading ? (
           <View style={styles.center}>
@@ -173,19 +171,20 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           </View>
         ) : (
           <>
-            <View style={styles.heroCard}>
+            <LinearGradient
+              colors={theme.colors.heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
               <Text style={styles.heroTitle}>Today</Text>
               <Text style={styles.heroMetric}>{todaysCalls.length}</Text>
               <Text style={styles.heroSub}>Calls placed today</Text>
               <View style={styles.heroBadges}>
-                <View style={styles.badgeSuccess}>
-                  <Text style={styles.badgeSuccessText}>Completed {completedToday}</Text>
-                </View>
-                <View style={styles.badgeNeutral}>
-                  <Text style={styles.badgeNeutralText}>Talk time {formatDuration(talkTimeToday)}</Text>
-                </View>
+                <BadgeChip label={`Completed ${completedToday}`} variant="success" />
+                <BadgeChip label={`Talk ${formatDuration(talkTimeToday)}`} variant="neutral" />
               </View>
-            </View>
+            </LinearGradient>
 
             <View style={styles.cardGrid}>
               <View style={styles.metricCard}>
@@ -251,12 +250,12 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
               )}
             </View>
 
-            <TouchableOpacity
-              style={styles.primaryAction}
+            <PrimaryButton
+              label="Open campaigns"
               onPress={() => navigation.navigate("Campaigns", { screen: "CampaignList" })}
-            >
-              <Text style={styles.primaryActionText}>Open Campaigns</Text>
-            </TouchableOpacity>
+              size="lg"
+              style={styles.primaryAction}
+            />
           </>
         )}
       </ScrollView>
@@ -271,49 +270,17 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing["3xl"],
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-  },
-  title: {
-    fontSize: theme.fontSize.xl,
-    fontWeight: "600",
-    color: theme.colors.textPrimary,
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.textSecondary,
-  },
-  headerAction: {
-    borderRadius: theme.radius.full,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.card,
-  },
-  headerActionText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "500",
-  },
   center: { paddingVertical: theme.spacing["3xl"], alignItems: "center" },
   card: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginTop: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   heroCard: {
-    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginTop: theme.spacing.sm,
@@ -321,46 +288,27 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontWeight: "500",
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: theme.fontWeight.medium,
+    textTransform: "uppercase",
+    letterSpacing: theme.letterSpacing.wide,
   },
   heroMetric: {
     marginTop: theme.spacing.sm,
-    fontSize: theme.fontSize["2xl"],
-    fontWeight: "700",
-    color: theme.colors.textPrimary,
+    fontSize: 40,
+    fontWeight: theme.fontWeight.bold,
+    color: "#FFFFFF",
+    letterSpacing: theme.letterSpacing.tight,
   },
   heroSub: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
+    color: "rgba(255,255,255,0.8)",
   },
   heroBadges: {
     flexDirection: "row",
     marginTop: theme.spacing.md,
     gap: theme.spacing.sm,
     flexWrap: "wrap",
-  },
-  badgeSuccess: {
-    backgroundColor: "#ECFDF5",
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  badgeSuccessText: {
-    color: theme.colors.success,
-    fontWeight: "500",
-    fontSize: theme.fontSize.sm,
-  },
-  badgeNeutral: {
-    backgroundColor: theme.colors.surfaceMuted,
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  badgeNeutralText: {
-    color: theme.colors.textSecondary,
-    fontWeight: "500",
-    fontSize: theme.fontSize.sm,
   },
   cardGrid: {
     marginTop: theme.spacing.md,
@@ -374,6 +322,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   metricLabel: {
@@ -443,16 +393,6 @@ const styles = StyleSheet.create({
   },
   primaryAction: {
     marginTop: theme.spacing.lg,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.full,
-    paddingVertical: theme.spacing.md,
-    alignItems: "center",
-    ...theme.shadow.button,
-  },
-  primaryActionText: {
-    color: theme.colors.card,
-    fontSize: theme.fontSize.base,
-    fontWeight: "600",
   },
   errorText: {
     color: theme.colors.error,

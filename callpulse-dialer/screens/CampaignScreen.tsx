@@ -3,7 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import BreakTimeButton from "../components/BreakTimeButton";
-import { ScreenChrome, StatusPanel } from "../components/ui";
+import { ScreenChrome, ScreenHeader, StatusPanel } from "../components/ui";
 import type { CampaignsStackParamList } from "../navigation/types";
 import { useRootNavigation } from "../navigation/useRootNavigation";
 import { AuthError, getCampaigns, getMe, getToken, logout } from "../services/api";
@@ -77,27 +77,25 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
           <Text style={styles.backText}>← Dashboard</Text>
         </Pressable>
 
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Text style={styles.title}>Campaigns</Text>
-            <Text style={styles.subtitle}>
-              {agent?.display_name || agent?.full_name || agent?.email || "Agent"}
-            </Text>
-            <View style={styles.roleBadge}>
-              <Text style={styles.roleBadgeText}>{(agent?.role || "agent").toUpperCase()}</Text>
-            </View>
-          </View>
-          <View style={styles.headerActions}>
-            <BreakTimeButton onPress={() => rootNavigation.navigate("AgentStatus")} compact />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Sign out"
-              onPress={handleLogout}
-              style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-            >
-              <Text style={styles.avatarText}>{initials || "AG"}</Text>
-            </Pressable>
-          </View>
+        <ScreenHeader
+          title="Campaigns"
+          subtitle={agent?.display_name || agent?.full_name || agent?.email || "Agent"}
+          right={
+            <>
+              <BreakTimeButton onPress={() => rootNavigation.navigate("AgentStatus")} compact />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Sign out"
+                onPress={handleLogout}
+                style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+              >
+                <Text style={styles.avatarText}>{initials || "AG"}</Text>
+              </Pressable>
+            </>
+          }
+        />
+        <View style={styles.roleBadge}>
+          <Text style={styles.roleBadgeText}>{(agent?.role || "agent").toUpperCase()}</Text>
         </View>
 
         {loading || error ? (
@@ -168,35 +166,9 @@ const styles = StyleSheet.create({
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.primary,
   },
-  header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-    marginBottom: theme.spacing.lg,
-    gap: theme.spacing.md,
-  },
-  headerLeft: {
-    flex: 1,
-    minWidth: 0,
-  },
-  headerActions: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-  },
-  title: {
-    fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.bold,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.letterSpacing.tight,
-  },
-  subtitle: {
-    marginTop: theme.spacing.xs,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.textSecondary,
-  },
   roleBadge: {
-    marginTop: theme.spacing.sm,
+    marginTop: -theme.spacing.md,
+    marginBottom: theme.spacing.lg,
     alignSelf: "flex-start",
     backgroundColor: theme.colors.surfaceMuted,
     borderRadius: theme.radius.full,

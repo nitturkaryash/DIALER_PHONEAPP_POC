@@ -19,6 +19,8 @@ import {
   isCommonsPcmAvailable,
   loadNativeAudioContext,
   loadNativeAudioRecord,
+  NATIVE_CUSTOMER_PLAYBACK_GAIN,
+  NATIVE_PLAYBACK_JITTER_SAMPLES,
   prepareNativeMicRecorder,
   safeNativeRecordStart,
   resetNativeCallAudio,
@@ -53,6 +55,9 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
   const scriptNodeRef = useRef<ScriptProcessorNode | null>(null);
   const micNodeRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const nextPlayTimeRef = useRef(0);
+  const playbackGainRef = useRef<AudioNode | null>(null);
+  const nativeJitterRef = useRef<Uint8Array | null>(null);
+  const nativeJitterLenRef = useRef(0);
   const connectGenRef = useRef(0);
   const connectStartedRef = useRef(false);
   const teardownRef = useRef(false);
@@ -85,30 +90,122 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
       audioCtxRef.current.close().catch(() => undefined);
     }
     audioCtxRef.current = null;
+    playbackGainRef.current = null;
+    nativeJitterRef.current = null;
+    nativeJitterLenRef.current = 0;
     void resetNativeCallAudio();
     setConnectionState((prev) => (prev === "error" ? "error" : "disconnected"));
   }, []);
 
-  const schedulePcmPlayback = useCallback((audioCtx: AudioContext, chunk: ArrayBuffer) => {
-    const view = new DataView(chunk);
-    const float32 = new Float32Array(chunk.byteLength / 2);
-    for (let i = 0; i < float32.length; i++) {
-      float32[i] = view.getInt16(i * 2, true) / 32768.0;
+  const ensurePlaybackRunning = useCallback(async (audioCtx: AudioContext) => {
+    if (audioCtx.state === "suspended") {
+      try {
+        await audioCtx.resume();
+      } catch {
+        /* noop */
+      }
     }
-    const buffer = audioCtx.createBuffer(1, float32.length, COMMONS_PCM_SAMPLE_RATE);
-    buffer.getChannelData(0).set(float32);
-    const bufferSource = audioCtx.createBufferSource();
-    bufferSource.buffer = buffer;
-    bufferSource.connect(audioCtx.destination);
-    let playTime = nextPlayTimeRef.current;
-    if (playTime - audioCtx.currentTime > 0.08) {
-      playTime = audioCtx.currentTime + 0.01;
-    } else {
-      playTime = Math.max(playTime, audioCtx.currentTime);
-    }
-    bufferSource.start(playTime);
-    nextPlayTimeRef.current = playTime + buffer.duration;
   }, []);
+
+  const ensureCustomerPlaybackGain = useCallback((audioCtx: AudioContext) => {
+    if (Platform.OS === "web") return audioCtx.destination;
+    if (!playbackGainRef.current) {
+      const gain = audioCtx.createGain();
+      gain.gain.value = NATIVE_CUSTOMER_PLAYBACK_GAIN;
+      gain.connect(audioCtx.destination);
+      playbackGainRef.current = gain;
+    }
+    return playbackGainRef.current;
+  }, []);
+
+  const playPcmBuffer = useCallback(
+    (audioCtx: AudioContext, chunk: ArrayBuffer, dest: AudioNode) => {
+      const view = new DataView(chunk);
+      const sampleCount = chunk.byteLength / 2;
+      const float32 = new Float32Array(sampleCount);
+      for (let i = 0; i < sampleCount; i++) {
+        float32[i] = view.getInt16(i * 2, true) / 32768.0;
+      }
+      const buffer = audioCtx.createBuffer(1, float32.length, COMMONS_PCM_SAMPLE_RATE);
+      buffer.getChannelData(0).set(float32);
+      const bufferSource = audioCtx.createBufferSource();
+      bufferSource.buffer = buffer;
+      bufferSource.connect(dest);
+      let playTime = nextPlayTimeRef.current;
+      if (playTime - audioCtx.currentTime > 0.12) {
+        playTime = audioCtx.currentTime + 0.02;
+      } else {
+        playTime = Math.max(playTime, audioCtx.currentTime);
+      }
+      bufferSource.start(playTime);
+      nextPlayTimeRef.current = playTime + buffer.duration;
+    },
+    []
+  );
+
+  const schedulePcmPlayback = useCallback(
+    (audioCtx: AudioContext, chunk: ArrayBuffer) => {
+      void ensurePlaybackRunning(audioCtx);
+      const dest = ensureCustomerPlaybackGain(audioCtx);
+
+      if (Platform.OS === "web") {
+        playPcmBuffer(audioCtx, chunk, dest);
+        return;
+      }
+
+      const byteLen = chunk.byteLength;
+      if (byteLen < 2 || byteLen % 2 !== 0) return;
+
+      const prevLen = nativeJitterLenRef.current;
+      const merged = new Uint8Array(prevLen + byteLen);
+      if (nativeJitterRef.current && prevLen > 0) {
+        merged.set(nativeJitterRef.current.subarray(0, prevLen), 0);
+      }
+      merged.set(new Uint8Array(chunk), prevLen);
+
+      const minBytes = NATIVE_PLAYBACK_JITTER_SAMPLES * 2;
+      let offset = 0;
+      while (merged.length - offset >= minBytes) {
+        const slice = merged.buffer.slice(
+          merged.byteOffset + offset,
+          merged.byteOffset + offset + minBytes
+        );
+        playPcmBuffer(audioCtx, slice, dest);
+        offset += minBytes;
+      }
+      const remain = merged.length - offset;
+      if (remain > 0) {
+        nativeJitterRef.current = merged.subarray(offset);
+        nativeJitterLenRef.current = remain;
+      } else {
+        nativeJitterRef.current = null;
+        nativeJitterLenRef.current = 0;
+      }
+    },
+    [ensureCustomerPlaybackGain, ensurePlaybackRunning, playPcmBuffer]
+  );
+
+  const handleWsAudioMessage = useCallback(
+    (data: unknown) => {
+      if (!audioCtxRef.current) return;
+      const audioCtx = audioCtxRef.current;
+
+      const playChunk = (buf: ArrayBuffer) => schedulePcmPlayback(audioCtx, buf);
+
+      if (data instanceof ArrayBuffer) {
+        playChunk(data);
+        return;
+      }
+      if (typeof data === "string") {
+        playChunk(base64ToArrayBuffer(data));
+        return;
+      }
+      if (typeof Blob !== "undefined" && data instanceof Blob) {
+        void data.arrayBuffer().then(playChunk).catch(() => undefined);
+      }
+    },
+    [schedulePcmPlayback]
+  );
 
   const connectWsWeb = useCallback(
     async (token: string, connectGen: number, ws: WebSocket, attempt: number) => {
@@ -168,10 +265,8 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
       };
 
       ws.onmessage = (event) => {
-        if (connectGen !== connectGenRef.current || !audioCtxRef.current) return;
-        const data = event.data;
-        if (!(data instanceof ArrayBuffer)) return;
-        schedulePcmPlayback(audioCtxRef.current, data);
+        if (connectGen !== connectGenRef.current) return;
+        handleWsAudioMessage(event.data);
       };
 
       ws.onclose = (event) => {
@@ -187,7 +282,7 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
         if (attempt < 8) setTimeout(() => connectWs(attempt + 1), 600);
       };
     },
-    [schedulePcmPlayback]
+    [handleWsAudioMessage]
   );
 
   const connectWsNative = useCallback(
@@ -203,7 +298,11 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
       if (!audioCtxRef.current || audioCtxRef.current.state === "closed") {
         audioCtxRef.current = new AudioContextClass({ sampleRate: COMMONS_PCM_SAMPLE_RATE });
         nextPlayTimeRef.current = audioCtxRef.current.currentTime;
+        playbackGainRef.current = null;
+        nativeJitterRef.current = null;
+        nativeJitterLenRef.current = 0;
       }
+      void ensurePlaybackRunning(audioCtxRef.current);
 
       ws.onopen = () => {
         if (connectGen !== connectGenRef.current || teardownRef.current) return;
@@ -211,6 +310,7 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
           try {
             await prepareNativeMicRecorder(AudioRecord);
             if (connectGen !== connectGenRef.current || teardownRef.current) return;
+            if (audioCtxRef.current) await ensurePlaybackRunning(audioCtxRef.current);
             console.log("[AgentAudioWS] native connected (Commons PCM)");
             AudioRecord.on("data", (data: string) => {
               if (mutedRef.current || ws.readyState !== WebSocket.OPEN) return;
@@ -237,13 +337,8 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
       };
 
       ws.onmessage = (event) => {
-        if (connectGen !== connectGenRef.current || !audioCtxRef.current) return;
-        const data = event.data;
-        if (data instanceof ArrayBuffer) {
-          schedulePcmPlayback(audioCtxRef.current, data);
-        } else if (typeof data === "string") {
-          schedulePcmPlayback(audioCtxRef.current, base64ToArrayBuffer(data));
-        }
+        if (connectGen !== connectGenRef.current) return;
+        handleWsAudioMessage(event.data);
       };
 
       ws.onclose = (event) => {
@@ -261,7 +356,7 @@ export function useAgentAudioWebSocket({ callId, enabled = true }: Options) {
         if (attempt < 8) setTimeout(() => connectWs(attempt + 1), 600);
       };
     },
-    [schedulePcmPlayback]
+    [ensurePlaybackRunning, handleWsAudioMessage]
   );
 
   const connectWs = useCallback(

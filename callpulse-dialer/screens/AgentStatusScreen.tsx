@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { ScreenChrome } from "../components/ui";
 import type { RootStackParamList } from "../navigation/types";
 import { useAgentStatus } from "../state/AgentStatusContext";
 import { theme } from "../theme";
@@ -50,14 +52,15 @@ export default function AgentStatusScreen({ navigation }: Props) {
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.headerRow}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Text style={styles.backText}>Close</Text>
-        </TouchableOpacity>
-        <Text style={styles.title}>Agent status</Text>
-        <View style={styles.backBtn} />
-      </View>
+    <ScreenChrome>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
+        <View style={styles.headerRow}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.closeBtn}>
+            <Feather name="x" size={22} color={theme.colors.textSecondary} />
+          </TouchableOpacity>
+          <Text style={styles.title}>Break & status</Text>
+          <View style={styles.closeBtn} />
+        </View>
 
       {isOnBreak ? (
         <View style={styles.activeCard}>
@@ -114,7 +117,8 @@ export default function AgentStatusScreen({ navigation }: Props) {
           })
         )}
       </View>
-    </ScrollView>
+      </ScrollView>
+    </ScreenChrome>
   );
 }
 
@@ -132,17 +136,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: theme.spacing.lg,
   },
-  backBtn: {
-    minWidth: 56,
-  },
-  backText: {
-    color: theme.colors.primary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.semibold,
+  closeBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: theme.colors.card,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
   },
   title: {
     fontSize: theme.fontSize.lg,
-    fontWeight: theme.fontWeight.semibold,
+    fontWeight: theme.fontWeight.bold,
     color: theme.colors.textPrimary,
   },
   intro: {
@@ -156,6 +162,9 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginBottom: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.warning,
+    ...theme.shadow.card,
   },
   activeLabel: {
     color: theme.colors.warning,
@@ -196,6 +205,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     borderWidth: 1,
     borderColor: theme.colors.border,
+    ...theme.shadow.card,
   },
   codeRowActive: {
     borderColor: theme.colors.warning,

@@ -4,81 +4,121 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
-  LayoutAnimation,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
-  TouchableOpacity,
   UIManager,
   useWindowDimensions,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { useRootNavigation } from "../navigation/useRootNavigation";
 import { AuthError, getToken, initiateOutboundCall } from "../services/api";
 import { useAgentStatus } from "../state/AgentStatusContext";
-import { theme } from "../theme";
 import { formatPhoneDisplay, isValidDialLength, normalizePhone } from "../utils/phone";
 
 if (Platform.OS === "android" && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const KEYPAD: Array<{ key: string; sub?: string }> = [
-  { key: "1" },
-  { key: "2", sub: "ABC" },
-  { key: "3", sub: "DEF" },
-  { key: "4", sub: "GHI" },
-  { key: "5", sub: "JKL" },
-  { key: "6", sub: "MNO" },
-  { key: "7", sub: "PQRS" },
-  { key: "8", sub: "TUV" },
-  { key: "9", sub: "WXYZ" },
-  { key: "*" },
-  { key: "0", sub: "+" },
-  { key: "#" },
+/** iOS Phone–inspired dialer palette */
+const D = {
+  bg: "#F2F2F7",
+  key: "#FFFFFF",
+  keyPressed: "#E5E5EA",
+  keyBorder: "rgba(0,0,0,0.04)",
+  digit: "#1C1C1E",
+  letters: "#8E8E93",
+  placeholder: "#AEAEB2",
+  call: "#34C759",
+  callPressed: "#2DB350",
+  callDisabled: "#C7C7CC",
+  error: "#FF3B30",
+  banner: "rgba(255,149,0,0.12)",
+  bannerText: "#C93400",
+};
+
+const KEY_ROWS: Array<Array<{ key: string; sub?: string }>> = [
+  [
+    { key: "1" },
+    { key: "2", sub: "ABC" },
+    { key: "3", sub: "DEF" },
+  ],
+  [
+    { key: "4", sub: "GHI" },
+    { key: "5", sub: "JKL" },
+    { key: "6", sub: "MNO" },
+  ],
+  [
+    { key: "7", sub: "PQRS" },
+    { key: "8", sub: "TUV" },
+    { key: "9", sub: "WXYZ" },
+  ],
+  [{ key: "*" }, { key: "0", sub: "+" }, { key: "#" }],
 ];
 
-/** Strip everything except digits, *, # from a possibly-formatted pasted string. */
 function sanitizeInput(text: string): string {
   return (text || "").replace(/[^\d*#]/g, "").slice(0, 15);
 }
 
+function DialKey({
+  label,
+  sub,
+  size,
+  onPress,
+}: {
+  label: string;
+  sub?: string;
+  size: number;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.dialKey,
+        { width: size, height: size, borderRadius: size / 2 },
+        pressed && styles.dialKeyPressed,
+      ]}
+    >
+      <Text style={[styles.dialKeyDigit, sub ? styles.dialKeyDigitWithSub : null]}>{label}</Text>
+      {sub ? <Text style={styles.dialKeySub}>{sub}</Text> : null}
+    </Pressable>
+  );
+}
+
 export default function DialerScreen() {
   const navigation = useRootNavigation();
+  const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
   const { isOnBreak } = useAgentStatus();
   const [digits, setDigits] = useState("");
-  const [customerName, setCustomerName] = useState("Manual Dial");
+  const [customerName, setCustomerName] = useState("");
+  const [showName, setShowName] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<TextInput>(null);
-  const compact = width < 380;
 
-  const contentMaxWidth = useMemo(() => Math.min(560, width - theme.spacing.screen * 2), [width]);
+  const horizontalPad = 28;
+  const keyGap = width < 380 ? 14 : 18;
   const keySize = useMemo(() => {
-    const gap = compact ? 12 : 16;
-    const keypadWidth = Math.min(contentMaxWidth, compact ? 320 : 360);
-    const keyWidth = Math.floor((keypadWidth - gap * 2) / 3);
-    return {
-      width: keyWidth,
-      height: keyWidth,
-    };
-  }, [compact, contentMaxWidth]);
+    const available = width - horizontalPad * 2 - keyGap * 2;
+    const computed = Math.floor(available / 3);
+    return Math.min(80, Math.max(64, computed));
+  }, [width, keyGap]);
 
-  const bumpLayout = () => {
-    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
-  };
+  const haptic = useCallback((style: Haptics.ImpactFeedbackStyle = Haptics.ImpactFeedbackStyle.Light) => {
+    if (Platform.OS !== "web") {
+      Haptics.impactAsync(style).catch(() => undefined);
+    }
+  }, []);
 
   const onKey = useCallback(
     (key: string | "back") => {
-      if (Platform.OS !== "web") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-      }
-      bumpLayout();
+      haptic();
       if (error) setError("");
       if (key === "back") {
         setDigits((prev) => prev.slice(0, -1));
@@ -86,20 +126,16 @@ export default function DialerScreen() {
       }
       setDigits((prev) => sanitizeInput(prev + key));
     },
-    [error]
+    [error, haptic]
   );
 
   const onClearAll = useCallback(() => {
-    if (Platform.OS !== "web") {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
-    }
-    bumpLayout();
+    haptic(Haptics.ImpactFeedbackStyle.Medium);
     setDigits("");
     setError("");
-  }, []);
+  }, [haptic]);
 
   const onInputChange = useCallback((text: string) => {
-    // Pasted / typed text — extract valid characters only.
     setDigits(sanitizeInput(text));
     setError("");
   }, []);
@@ -121,6 +157,7 @@ export default function DialerScreen() {
     try {
       setLoading(true);
       setError("");
+      haptic(Haptics.ImpactFeedbackStyle.Medium);
       const token = await getToken();
       if (!token) {
         navigation.replace("Login");
@@ -131,6 +168,9 @@ export default function DialerScreen() {
         phone_number: phone,
         customer_name: trimmedName,
         handler: "human",
+        verification_context: {
+          handler: "human",
+        },
       });
       navigation.navigate("HumanCall", {
         callId: result.call_id,
@@ -150,378 +190,295 @@ export default function DialerScreen() {
 
   const display = formatPhoneDisplay(digits);
   const canCall = isValidDialLength(digits) && !loading && !isOnBreak;
-  const normalized = normalizePhone(digits);
+  const hasDigits = digits.length > 0;
+  const displayFontSize = display.length > 14 ? 28 : display.length > 10 ? 32 : 38;
 
   return (
-    <LinearGradient
-      colors={theme.colors.backgroundGradient}
-      start={{ x: 0, y: 0 }}
-      end={{ x: 0, y: 1 }}
-      style={styles.gradient}
-    >
-      <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        keyboardShouldPersistTaps="handled"
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={[styles.container, { maxWidth: contentMaxWidth }]}>
-          <View style={styles.headerBlock}>
-            <Text style={styles.eyebrow}>Manual dial</Text>
-            <Text style={styles.title}>Dial a customer</Text>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      {isOnBreak ? (
+        <View style={styles.breakBanner}>
+          <Feather name="pause-circle" size={14} color={D.bannerText} />
+          <Text style={styles.breakBannerText}>On break — end break to dial</Text>
+        </View>
+      ) : null}
+
+      {/* Number display — centered like native Phone app */}
+      <View style={styles.displayZone}>
+        <View style={styles.displayRow}>
+          <View style={styles.displaySide} />
+          <Pressable onPress={() => inputRef.current?.focus()} style={styles.displayPress}>
+            <TextInput
+              ref={inputRef}
+              style={[styles.displayInput, { fontSize: displayFontSize }]}
+              value={display}
+              onChangeText={onInputChange}
+              placeholder="Enter number"
+              placeholderTextColor={D.placeholder}
+              keyboardType="phone-pad"
+              showSoftInputOnFocus={false}
+              selectTextOnFocus
+              numberOfLines={1}
+              allowFontScaling={false}
+              autoCorrect={false}
+              autoComplete="tel"
+              textContentType="telephoneNumber"
+            />
+          </Pressable>
+          <View style={styles.displaySide}>
+            {hasDigits ? (
+              <Pressable
+                onPress={() => onKey("back")}
+                onLongPress={onClearAll}
+                style={styles.deleteBtn}
+                accessibilityLabel="Delete digit. Long press to clear all."
+              >
+                <Ionicons name="backspace-outline" size={26} color={D.digit} />
+              </Pressable>
+            ) : null}
           </View>
+        </View>
 
-          {Platform.OS !== "web" ? (
-            <View style={styles.infoBanner}>
-              <Feather name="info" size={16} color={theme.colors.primary} />
-              <Text style={styles.infoBannerText}>
-                Live calls need an EAS dev build with Commons PCM modules (not Expo Go).
-              </Text>
-            </View>
-          ) : null}
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
-          {isOnBreak ? (
-            <View style={styles.breakBanner}>
-              <Feather name="alert-triangle" size={16} color={theme.colors.warning} />
-              <Text style={styles.breakBannerText}>You're on break — end it before dialing.</Text>
-            </View>
-          ) : null}
-
-          {/* Number display: editable so user can paste / edit. Keypad below also appends. */}
-          <View style={styles.displayCard}>
-            <Pressable
-              onPress={() => inputRef.current?.focus()}
-              style={styles.displayRow}
-              accessibilityRole="button"
-              accessibilityLabel="Phone number input"
-            >
-              <TextInput
-                ref={inputRef}
-                style={[styles.display, compact && styles.displayCompact]}
-                value={display}
-                onChangeText={onInputChange}
-                placeholder="Enter number"
-                placeholderTextColor={theme.colors.textTertiary}
-                keyboardType="phone-pad"
-                showSoftInputOnFocus={false} // on-screen keypad is the primary input
-                selectTextOnFocus
-                numberOfLines={1}
-                allowFontScaling={false}
-                autoCorrect={false}
-                autoComplete="tel"
-                textContentType="telephoneNumber"
-              />
-              {digits.length > 0 ? (
-                <TouchableOpacity
-                  accessibilityRole="button"
-                  accessibilityLabel="Clear number"
-                  onPress={onClearAll}
-                  style={styles.clearBtn}
-                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                >
-                  <Feather name="x" size={18} color={theme.colors.textSecondary} />
-                </TouchableOpacity>
-              ) : null}
-            </Pressable>
-            <View style={styles.displayHintRow}>
-              <Feather name="hash" size={12} color={theme.colors.textTertiary} />
-              <Text style={styles.displayHint}>
-                {normalized || "Long-press to paste a number"}
-              </Text>
-            </View>
-          </View>
-
-          <View style={styles.nameInputWrap}>
-            <Feather name="user" size={16} color={theme.colors.textTertiary} />
+        {showName || customerName ? (
+          <View style={styles.nameRow}>
             <TextInput
               style={styles.nameInput}
               value={customerName}
               onChangeText={setCustomerName}
-              placeholder="Contact name"
-              placeholderTextColor={theme.colors.textTertiary}
+              placeholder="Contact name (optional)"
+              placeholderTextColor={D.placeholder}
               returnKeyType="done"
             />
           </View>
+        ) : (
+          <Pressable onPress={() => setShowName(true)} style={styles.addNameBtn}>
+            <Text style={styles.addNameText}>add name</Text>
+          </Pressable>
+        )}
+      </View>
 
-          {!!error && (
-            <View style={styles.errorRow}>
-              <Feather name="alert-circle" size={14} color={theme.colors.error} />
-              <Text style={styles.error}>{error}</Text>
-            </View>
-          )}
-
-          <View style={styles.keypad}>
-            {KEYPAD.map((entry) => (
-              <TouchableOpacity
+      {/* Keypad grid */}
+      <View style={[styles.keypad, { paddingHorizontal: horizontalPad, gap: keyGap }]}>
+        {KEY_ROWS.map((row, rowIdx) => (
+          <View key={`row-${rowIdx}`} style={[styles.keyRow, { gap: keyGap }]}>
+            {row.map((entry) => (
+              <DialKey
                 key={entry.key}
-                activeOpacity={0.7}
-                style={[styles.key, keySize]}
+                label={entry.key}
+                sub={entry.sub}
+                size={keySize}
                 onPress={() => onKey(entry.key)}
-              >
-                <Text style={[styles.keyText, compact && styles.keyTextCompact]}>{entry.key}</Text>
-                {!!entry.sub && <Text style={styles.keySub}>{entry.sub}</Text>}
-              </TouchableOpacity>
+              />
             ))}
           </View>
+        ))}
+      </View>
 
-          <View style={styles.actionRow}>
-            <View style={styles.actionSpacer} />
-            <TouchableOpacity
-              activeOpacity={0.85}
-              onPress={onCall}
-              disabled={!canCall}
-              style={[styles.callWrap, !canCall ? styles.callDisabled : undefined]}
-            >
-              <LinearGradient
-                colors={canCall ? theme.colors.primaryGradient : [theme.colors.muted, theme.colors.muted]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.callBtn}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <Feather name="phone" size={28} color="#fff" />
-                )}
-              </LinearGradient>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.6}
-              onPress={() => onKey("back")}
-              onLongPress={onClearAll}
-              style={styles.backspaceBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Backspace (long-press to clear)"
-              disabled={digits.length === 0}
-            >
-              <Ionicons
-                name="backspace-outline"
-                size={26}
-                color={digits.length > 0 ? theme.colors.textPrimary : theme.colors.textTertiary}
-              />
-            </TouchableOpacity>
-          </View>
+      {/* Green call button */}
+      <View style={[styles.callZone, { paddingBottom: Math.max(insets.bottom, 12) }]}>
+        <Pressable
+          onPress={() => void onCall()}
+          disabled={!canCall}
+          style={({ pressed }) => [
+            styles.callOuter,
+            !canCall && styles.callOuterDisabled,
+            pressed && canCall && styles.callOuterPressed,
+          ]}
+        >
+          <LinearGradient
+            colors={canCall ? [D.call, D.callPressed] : [D.callDisabled, D.callDisabled]}
+            style={styles.callBtn}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <Feather name="phone" size={32} color="#fff" />
+            )}
+          </LinearGradient>
+        </Pressable>
+      </View>
 
-          <Text style={styles.footerHint}>
-            Long-press anywhere on the keypad backspace to clear · paste from clipboard via long-press on the number
-          </Text>
-        </View>
-      </ScrollView>
-    </LinearGradient>
+      {Platform.OS !== "web" ? (
+        <Text style={styles.devFoot}>EAS dev build required for live agent audio</Text>
+      ) : null}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  scrollContent: {
-    flexGrow: 1,
-    paddingBottom: theme.spacing.lg,
-  },
-  container: {
-    width: "100%",
-    alignSelf: "center",
-    paddingHorizontal: theme.spacing.screen,
-    paddingTop: theme.spacing.xl,
-    paddingBottom: theme.spacing.xl,
-  },
-  headerBlock: {
-    marginBottom: theme.spacing.lg,
-  },
-  eyebrow: {
-    fontSize: theme.fontSize.xs,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.textTertiary,
-    letterSpacing: theme.letterSpacing.caps,
-    textTransform: "uppercase",
-  },
-  title: {
-    marginTop: theme.spacing.xs,
-    fontSize: theme.fontSize.xl,
-    fontWeight: theme.fontWeight.bold,
-    color: theme.colors.textPrimary,
-    letterSpacing: theme.letterSpacing.tight,
-  },
-  infoBanner: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.primarySoft,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm + 2,
-    marginBottom: theme.spacing.md,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.primary,
-  },
-  infoBannerText: {
+  root: {
     flex: 1,
-    color: theme.colors.textPrimary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
-    lineHeight: 20,
+    backgroundColor: D.bg,
   },
   breakBanner: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.warningSoft,
-    borderRadius: theme.radius.md,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm + 2,
-    marginBottom: theme.spacing.md,
-    borderLeftWidth: 3,
-    borderLeftColor: theme.colors.warning,
+    justifyContent: "center",
+    gap: 6,
+    marginHorizontal: 20,
+    marginTop: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 10,
+    backgroundColor: D.banner,
   },
   breakBannerText: {
-    flex: 1,
-    color: theme.colors.warning,
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.medium,
+    fontSize: 13,
+    fontWeight: "600",
+    color: D.bannerText,
   },
-  displayCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,
-    paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md + 2,
-    marginBottom: theme.spacing.md,
-    ...theme.shadow.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  displayZone: {
+    flex: 1,
+    minHeight: 120,
+    maxHeight: 200,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingHorizontal: 24,
+    paddingTop: 8,
   },
   displayRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: theme.spacing.sm,
+    width: "100%",
+    maxWidth: 360,
   },
-  display: {
-    flex: 1,
-    fontSize: theme.fontSize["2xl"],
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.textPrimary,
-    letterSpacing: 1,
-    minHeight: 44,
-    paddingVertical: 0,
-    textAlign: "left",
-  },
-  displayCompact: {
-    fontSize: theme.fontSize.xl,
-  },
-  clearBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: theme.colors.surfaceMuted,
+  displaySide: {
+    width: 52,
     alignItems: "center",
     justifyContent: "center",
   },
-  displayHintRow: {
-    flexDirection: "row",
+  displayPress: {
+    flex: 1,
     alignItems: "center",
-    gap: 4,
-    marginTop: 4,
   },
-  displayHint: {
-    fontSize: theme.fontSize.sm,
-    color: theme.colors.textTertiary,
-    fontVariant: ["tabular-nums"],
+  displayInput: {
+    width: "100%",
+    textAlign: "center",
+    fontWeight: "300",
+    color: D.digit,
+    letterSpacing: 1.2,
+    paddingVertical: 4,
   },
-  nameInputWrap: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.sm,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.lg,
-    height: 48,
-    marginBottom: theme.spacing.md,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
+  deleteBtn: {
+    padding: 8,
+  },
+  errorText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: D.error,
+    fontWeight: "500",
+    textAlign: "center",
+  },
+  addNameBtn: {
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 12,
+  },
+  addNameText: {
+    fontSize: 15,
+    color: "#007AFF",
+    fontWeight: "400",
+  },
+  nameRow: {
+    marginTop: 8,
+    width: "100%",
+    maxWidth: 280,
   },
   nameInput: {
-    flex: 1,
-    fontSize: theme.fontSize.base,
-    color: theme.colors.textPrimary,
-    paddingVertical: 0,
-  },
-  errorRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: theme.spacing.xs,
-    marginBottom: theme.spacing.sm,
-  },
-  error: {
-    color: theme.colors.error,
-    fontSize: theme.fontSize.sm,
+    fontSize: 15,
+    color: D.digit,
+    textAlign: "center",
+    paddingVertical: 8,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#C7C7CC",
   },
   keypad: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    marginBottom: theme.spacing.lg,
-    rowGap: theme.spacing.sm,
+    alignSelf: "center",
+    width: "100%",
+    maxWidth: 400,
+    paddingBottom: 8,
   },
-  key: {
-    minWidth: 72,
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.full,
+  keyRow: {
+    flexDirection: "row",
+    justifyContent: "center",
+    marginBottom: 2,
+  },
+  dialKey: {
+    backgroundColor: D.key,
     alignItems: "center",
     justifyContent: "center",
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    ...theme.shadow.card,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: D.keyBorder,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.06,
+        shadowRadius: 3,
+      },
+      android: { elevation: 2 },
+      default: {},
+    }),
   },
-  keyText: {
-    fontSize: 30,
-    fontWeight: theme.fontWeight.medium,
-    color: theme.colors.textPrimary,
+  dialKeyPressed: {
+    backgroundColor: D.keyPressed,
+    transform: [{ scale: 0.96 }],
+  },
+  dialKeyDigit: {
+    fontSize: 32,
+    fontWeight: "300",
+    color: D.digit,
     lineHeight: 36,
   },
-  keyTextCompact: {
-    fontSize: 26,
+  dialKeyDigitWithSub: {
+    marginTop: 2,
+    lineHeight: 32,
   },
-  keySub: {
-    marginTop: -4,
+  dialKeySub: {
+    marginTop: -2,
     fontSize: 10,
-    letterSpacing: 1.5,
-    color: theme.colors.textTertiary,
-    fontWeight: theme.fontWeight.semibold,
+    fontWeight: "600",
+    letterSpacing: 2,
+    color: D.letters,
   },
-  actionRow: {
-    flexDirection: "row",
+  callZone: {
     alignItems: "center",
-    justifyContent: "space-between",
-    marginTop: theme.spacing.sm,
+    paddingTop: 4,
   },
-  actionSpacer: {
-    width: 56,
+  callOuter: {
+    borderRadius: 40,
+    ...Platform.select({
+      ios: {
+        shadowColor: D.call,
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.35,
+        shadowRadius: 12,
+      },
+      android: { elevation: 8 },
+      default: {},
+    }),
   },
-  callWrap: {
-    width: 80,
-    height: 80,
+  callOuterDisabled: {
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  callOuterPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.96 }],
   },
   callBtn: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 72,
+    height: 72,
+    borderRadius: 36,
     alignItems: "center",
     justifyContent: "center",
-    ...theme.shadow.button,
   },
-  callDisabled: { opacity: 0.55 },
-  backspaceBtn: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: theme.colors.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-  },
-  footerHint: {
-    marginTop: theme.spacing.lg,
-    fontSize: theme.fontSize.xs,
-    color: theme.colors.textTertiary,
+  devFoot: {
     textAlign: "center",
-    lineHeight: 16,
+    fontSize: 10,
+    color: D.letters,
+    paddingBottom: 4,
+    paddingHorizontal: 24,
   },
 });
