@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
-import { AuthError, clearToken, getOutboundCallStatus, getToken } from "../services/api";
+import { AuthError, getOutboundCallStatus, getToken, hangupCall } from "../services/api";
 import { theme } from "../theme";
 import type { Lead } from "../types";
 
@@ -32,6 +33,10 @@ function formatStatusLabel(status: string): string {
   return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
+/**
+ * Read-only outbound monitor — used when we don't need the agent's microphone (AI-handler).
+ * For agent-talks calls, use HumanCallScreen which opens the audio bridge WebSocket.
+ */
 export default function OutboundCallScreen({ route, navigation }: Props) {
   const { callId, phone, customerName } = route.params;
   const [elapsed, setElapsed] = useState(0);
@@ -74,7 +79,6 @@ export default function OutboundCallScreen({ route, navigation }: Props) {
       } catch (e) {
         if (!mounted) return;
         if (e instanceof AuthError) {
-          await clearToken();
           navigation.replace("Login");
           return;
         }
@@ -90,7 +94,15 @@ export default function OutboundCallScreen({ route, navigation }: Props) {
     };
   }, [callId, navigation]);
 
-  const endCall = () => {
+  const endCall = async () => {
+    try {
+      const token = await getToken();
+      if (token && callId) {
+        await hangupCall(token, callId).catch(() => undefined);
+      }
+    } catch {
+      // ignore network errors on hangup
+    }
     const lead: Lead = {
       id: "",
       name: customerName,
@@ -127,8 +139,14 @@ export default function OutboundCallScreen({ route, navigation }: Props) {
 
         <View style={styles.controls}>
           <View style={styles.spacer} />
-          <TouchableOpacity activeOpacity={0.85} style={styles.endBtn} onPress={endCall}>
-            <Text style={styles.endBtnIcon}>✕</Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.endBtn}
+            onPress={endCall}
+            accessibilityRole="button"
+            accessibilityLabel="End call"
+          >
+            <Feather name="phone-off" size={26} color="#fff" />
           </TouchableOpacity>
           <View style={styles.spacer} />
         </View>
@@ -211,11 +229,6 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.error,
     justifyContent: "center",
     alignItems: "center",
-  },
-  endBtnIcon: {
-    color: theme.colors.card,
-    fontSize: theme.fontSize.xl,
-    fontWeight: "700",
   },
   hint: {
     marginTop: theme.spacing.lg,

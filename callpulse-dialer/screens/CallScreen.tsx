@@ -1,13 +1,30 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
-import { AuthError, clearToken, getToken, startCall, updateCallStatus } from "../services/api";
+import {
+  AuthError,
+  getOutboundCallStatus,
+  getToken,
+  hangupCall,
+  initiateOutboundCall,
+} from "../services/api";
 import { theme } from "../theme";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Call">;
+
+const TERMINAL_STATUSES = new Set([
+  "completed",
+  "failed",
+  "busy",
+  "no_answer",
+  "canceled",
+  "cancelled",
+  "ended",
+]);
 
 function formatTimer(seconds: number): string {
   const mins = Math.floor(seconds / 60).toString().padStart(2, "0");
@@ -15,15 +32,29 @@ function formatTimer(seconds: number): string {
   return `${mins}:${secs}`;
 }
 
+function formatStatusLabel(status: string): string {
+  return status.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+/**
+ * Campaign-mode call bootstrapper. Initiates the outbound call against the
+ * Voice-Assisstant-Backend and then:
+ *   - for handler="human" → replaces to HumanCall (audio bridge over WebSocket)
+ *   - for handler="ai" → stays here, polls status, hangup → disposition
+ */
 export default function CallScreen({ route, navigation }: Props) {
-  const { lead, processId, processName } = route.params;
+  const { lead, processId, processName, handler = "ai" } = route.params;
   const [loading, setLoading] = useState(true);
   const [callId, setCallId] = useState("");
+  const [status, setStatus] = useState("queued");
   const [elapsed, setElapsed] = useState(0);
   const [error, setError] = useState("");
+  const initRef = useRef(false);
 
+  // Initiate the call exactly once.
   useEffect(() => {
-    let interval: ReturnType<typeof setInterval> | undefined;
+    if (initRef.current) return;
+    initRef.current = true;
     let mounted = true;
     (async () => {
       try {
@@ -32,15 +63,30 @@ export default function CallScreen({ route, navigation }: Props) {
           navigation.replace("Login");
           return;
         }
-        const session = await startCall(token, lead.id, processId);
-        await updateCallStatus(token, session.call_id, "answered");
+        const result = await initiateOutboundCall(token, {
+          phone_number: lead.phone,
+          customer_name: lead.name,
+          customer_id: lead.id || undefined,
+          handler,
+          verification_context: {
+            campaign_id: processId,
+            campaign_contact_id: lead.id || undefined,
+            handler,
+          },
+        });
         if (!mounted) return;
-        setCallId(session.call_id);
+        if (handler === "human") {
+          navigation.replace("HumanCall", {
+            callId: result.call_id,
+            phone: lead.phone,
+            customerName: lead.name,
+          });
+          return;
+        }
+        setCallId(result.call_id);
         setLoading(false);
-        interval = setInterval(() => setElapsed((prev) => prev + 1), 1000);
       } catch (e) {
         if (e instanceof AuthError) {
-          await clearToken();
           navigation.replace("Login");
           return;
         }
@@ -52,9 +98,44 @@ export default function CallScreen({ route, navigation }: Props) {
     })();
     return () => {
       mounted = false;
+    };
+  }, [handler, lead, processId, navigation]);
+
+  // Elapsed timer once the call_id is known.
+  useEffect(() => {
+    if (!callId) return;
+    const interval = setInterval(() => setElapsed((prev) => prev + 1), 1000);
+    return () => clearInterval(interval);
+  }, [callId]);
+
+  // Poll AI-handler call status.
+  useEffect(() => {
+    if (!callId || handler === "human") return;
+    let mounted = true;
+    let interval: ReturnType<typeof setInterval> | undefined;
+
+    const poll = async () => {
+      try {
+        const token = await getToken();
+        if (!token) return;
+        const data = await getOutboundCallStatus(token, callId);
+        if (!mounted) return;
+        setStatus(data.status);
+        if (TERMINAL_STATUSES.has(data.status.toLowerCase())) {
+          if (interval) clearInterval(interval);
+        }
+      } catch {
+        // best-effort
+      }
+    };
+
+    poll();
+    interval = setInterval(poll, 2000);
+    return () => {
+      mounted = false;
       if (interval) clearInterval(interval);
     };
-  }, [lead.id, navigation, processId]);
+  }, [callId, handler]);
 
   const initials = useMemo(
     () =>
@@ -74,8 +155,16 @@ export default function CallScreen({ route, navigation }: Props) {
         navigation.replace("Login");
         return;
       }
-      if (callId) await updateCallStatus(token, callId, "ended");
-      navigation.replace("Disposition", { callId, processId, processName, lead, returnTo: "leads" });
+      if (callId) {
+        await hangupCall(token, callId).catch(() => undefined);
+      }
+      navigation.replace("Disposition", {
+        callId,
+        processId,
+        processName,
+        lead,
+        returnTo: "leads",
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to end call");
     }
@@ -89,20 +178,18 @@ export default function CallScreen({ route, navigation }: Props) {
       style={styles.gradient}
     >
       <View style={styles.container}>
-        {/* Lead info */}
         <Text style={styles.name}>{lead.name}</Text>
         <Text style={styles.meta}>
           {lead.phone} • {processName}
         </Text>
+        {!!status && <Text style={styles.statusBadge}>{formatStatusLabel(status)}</Text>}
 
-        {/* Avatar circle */}
         <View style={styles.avatarWrap}>
           <View style={styles.avatar}>
             <Text style={styles.avatarText}>{initials || "LD"}</Text>
           </View>
         </View>
 
-        {/* Timer / loading */}
         {loading ? (
           <ActivityIndicator color={theme.colors.primary} style={styles.timer} />
         ) : (
@@ -111,28 +198,20 @@ export default function CallScreen({ route, navigation }: Props) {
 
         {!!error && <Text style={styles.error}>{error}</Text>}
 
-        {/* Call controls */}
         <View style={styles.controls}>
-          {/* Mute — 40×40 icon button */}
-          <TouchableOpacity activeOpacity={0.85} style={styles.iconBtn}>
-            <Text style={styles.iconBtnText}>🔇</Text>
-          </TouchableOpacity>
-
-          {/* Active call — primary gradient circle 72×72 */}
-          <LinearGradient
-            colors={theme.colors.primaryGradient}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.callBtn}
+          <View style={styles.spacer} />
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.endBtn}
+            onPress={endCall}
+            accessibilityRole="button"
+            accessibilityLabel="End call"
           >
-            <Text style={styles.callBtnIcon}>📞</Text>
-          </LinearGradient>
-
-          {/* End call — red circle 72×72 */}
-          <TouchableOpacity activeOpacity={0.85} style={styles.endBtn} onPress={endCall}>
-            <Text style={styles.endBtnIcon}>✕</Text>
+            <Feather name="phone-off" size={28} color="#fff" />
           </TouchableOpacity>
+          <View style={styles.spacer} />
         </View>
+        <Text style={styles.hint}>End call to save disposition</Text>
       </View>
     </LinearGradient>
   );
@@ -157,6 +236,17 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     color: theme.colors.textSecondary,
     textAlign: "center",
+  },
+  statusBadge: {
+    marginTop: theme.spacing.md,
+    fontSize: theme.fontSize.sm,
+    fontWeight: "500",
+    color: theme.colors.primary,
+    backgroundColor: "rgba(111,163,210,0.12)",
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.full,
+    overflow: "hidden",
   },
   avatarWrap: { marginTop: theme.spacing["2xl"], marginBottom: theme.spacing.xl },
   avatar: {
@@ -191,29 +281,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-evenly",
     alignItems: "center",
   },
-  // 40×40 icon button (design profile spec)
-  iconBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.card,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  iconBtnText: { fontSize: 16 },
-  // 72×72 primary gradient circle
-  callBtn: {
-    width: 72,
-    height: 72,
-    borderRadius: theme.radius.full,
-    alignItems: "center",
-    justifyContent: "center",
-    ...theme.shadow.button,
-  },
-  callBtnIcon: { fontSize: 28 },
-  // 72×72 end call red circle
+  spacer: { width: 40 },
   endBtn: {
     width: 72,
     height: 72,
@@ -223,9 +291,9 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...theme.shadow.card,
   },
-  endBtnIcon: {
-    fontSize: 26,
-    color: theme.colors.card,
-    fontWeight: theme.fontWeight.bold,
+  hint: {
+    marginTop: theme.spacing.lg,
+    fontSize: theme.fontSize.sm,
+    color: theme.colors.textTertiary,
   },
 });

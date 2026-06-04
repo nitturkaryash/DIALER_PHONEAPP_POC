@@ -1,2 +1,0 @@
-"""Starlette/FastAPI middleware components."""
-

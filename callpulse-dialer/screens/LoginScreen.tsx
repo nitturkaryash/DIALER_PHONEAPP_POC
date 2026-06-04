@@ -4,7 +4,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { AppCard, PrimaryButton, ScreenChrome, TextField } from "../components/ui";
 import type { RootStackParamList } from "../navigation/types";
-import { login, setToken } from "../services/api";
+import { login, setRefreshToken, setToken } from "../services/api";
 import { theme } from "../theme";
 
 const DEV_MODE = process.env.EXPO_PUBLIC_ENABLE_DEV_MOCKS === "true";
@@ -29,6 +29,9 @@ export default function LoginScreen({ navigation, onLoginSuccess }: Props) {
       setError("");
       const result = await login(email.trim(), password);
       await setToken(result.access_token);
+      if (result.refresh_token) {
+        await setRefreshToken(result.refresh_token);
+      }
       onLoginSuccess();
       navigation.replace("MainTabs");
     } catch (e) {

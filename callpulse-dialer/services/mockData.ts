@@ -1,116 +1,117 @@
 import type {
-  Agent, Campaign, CallSession, Lead,
-  AgentDashboardSummary, AgentDashboardTrends,
-  AgentFailureBreakdown, AgentConversionFunnel,
+  Agent,
+  AgentStatusCode,
+  Campaign,
   CallHistoryResponse,
+  DispositionCatalogItem,
+  Lead,
+  OutboundCallRequest,
+  OutboundCallResponse,
+  OutboundCallStatus,
 } from "../types";
 
 export const DEV_TOKEN = "dev_token";
+export const ENABLE_DEV_MOCKS = process.env.EXPO_PUBLIC_ENABLE_DEV_MOCKS === "true";
 
 export const mockAgent: Agent = {
   id: "dev-agent-1",
+  user_id: "dev-agent-1",
+  tenant_id: "dev-tenant",
   email: "agent@callpulse.dev",
   full_name: "Dev Agent",
+  display_name: "Dev Agent",
   role: "agent",
 };
 
 export const mockCampaigns: Campaign[] = [
-  { id: "camp-1", name: "Q2 Outbound Leads", status: "active", lead_count: 142 },
-  { id: "camp-2", name: "Renewal Follow-up", status: "active", lead_count: 87 },
-  { id: "camp-3", name: "Cold Prospects June", status: "paused", lead_count: 310 },
-  { id: "camp-4", name: "Warm Inbound List", status: "active", lead_count: 55 },
+  { id: "camp-1", name: "Q2 Outbound Leads", status: "active", handler: "human", total_contacts: 142, completed_contacts: 30 },
+  { id: "camp-2", name: "Renewal Follow-up", status: "active", handler: "ai", total_contacts: 87, completed_contacts: 10 },
+  { id: "camp-3", name: "Cold Prospects June", status: "paused", handler: "human", total_contacts: 310, completed_contacts: 0 },
+  { id: "camp-4", name: "Warm Inbound List", status: "active", handler: "ai", total_contacts: 55, completed_contacts: 5 },
 ];
 
 export const mockLeads: Lead[] = [
-  { id: "lead-1", name: "Sarah Johnson", phone: "+1 (555) 204-3311", status: "pending", email: "sarah.j@email.com" },
-  { id: "lead-2", name: "Michael Torres", phone: "+1 (555) 871-0092", status: "pending" },
-  { id: "lead-3", name: "Emily Chen", phone: "+1 (555) 439-7761", status: "pending", email: "echen@work.com" },
-  { id: "lead-4", name: "David Patel", phone: "+1 (555) 654-2200", status: "pending" },
-  { id: "lead-5", name: "Rachel Kim", phone: "+1 (555) 321-9045", status: "called" },
-  { id: "lead-6", name: "James Okafor", phone: "+1 (555) 788-1144", status: "pending" },
+  { id: "lead-1", name: "Sarah Johnson", phone: "+15552043311", status: "pending", email: "sarah.j@email.com" },
+  { id: "lead-2", name: "Michael Torres", phone: "+15558710092", status: "pending" },
+  { id: "lead-3", name: "Emily Chen", phone: "+15554397761", status: "pending", email: "echen@work.com" },
+  { id: "lead-4", name: "David Patel", phone: "+15556542200", status: "pending" },
+  { id: "lead-5", name: "Rachel Kim", phone: "+15553219045", status: "called" },
+  { id: "lead-6", name: "James Okafor", phone: "+15557881144", status: "pending" },
 ];
 
-export function mockCallSession(leadId: string): CallSession {
+export const mockPauseCodes: AgentStatusCode[] = [
+  { id: "ps-lunch", code: "LUNCH", label: "Lunch" },
+  { id: "ps-bio", code: "BIO", label: "Bio Break" },
+  { id: "ps-training", code: "TRAINING", label: "Training" },
+  { id: "ps-meeting", code: "MEETING", label: "Team meeting" },
+];
+
+export const mockDispositions: DispositionCatalogItem[] = [
+  { id: "disp-1", code: "CONNECTED", name: "Connected", active: true, requires_callback: false },
+  { id: "disp-2", code: "NO_ANSWER", name: "No Answer", active: true, requires_callback: false },
+  { id: "disp-3", code: "BUSY", name: "Busy", active: true, requires_callback: false },
+  { id: "disp-4", code: "CALLBACK", name: "Call Later", active: true, requires_callback: true },
+  { id: "disp-5", code: "INVALID", name: "Invalid Number", active: true, requires_callback: false },
+];
+
+export function mockOutboundCallResponse(payload: OutboundCallRequest): OutboundCallResponse {
   return {
-    call_id: `call-dev-${leadId}-${Date.now()}`,
-    lead_name: mockLeads.find((l) => l.id === leadId)?.name ?? "Unknown",
-    phone: mockLeads.find((l) => l.id === leadId)?.phone ?? "",
+    success: true,
+    call_id: `mock-call-${Date.now()}`,
+    status: "queued",
+    message: `Dialing ${payload.phone_number}`,
+    provider: "mock",
   };
 }
 
-export const mockDashboardSummary: AgentDashboardSummary = {
-  total_calls: 48,
-  connected_calls: 35,
-  failed_calls: 8,
-  fatal_calls: 5,
-  quality_score_avg: 78,
-  conversion_count: 12,
-  conversion_rate: 34.3,
-  avg_call_duration: 142,
-  talk_time_total: 6816,
-  followups_due: 4,
-  lost_leads: 3,
-  ghost_leads: 2,
-  callbacks_booked: 7,
-};
-
-const today = new Date();
-function daysAgo(n: number) {
-  const d = new Date(today);
-  d.setDate(d.getDate() - n);
-  return d.toISOString().slice(0, 10);
+export function mockOutboundCallStatus(callId: string): OutboundCallStatus {
+  return {
+    call_id: callId,
+    status: "in_progress",
+    phone_number: "+10000000000",
+    handler: "human",
+    started_at: new Date(Date.now() - 5000).toISOString(),
+  };
 }
-
-export const mockDashboardTrends: AgentDashboardTrends = {
-  last_7_days: Array.from({ length: 7 }, (_, i) => ({
-    date: daysAgo(6 - i),
-    calls: 4 + Math.floor(Math.random() * 8),
-    connected_calls: 3 + Math.floor(Math.random() * 5),
-    fatal_calls: Math.floor(Math.random() * 2),
-    quality_score_avg: 70 + Math.floor(Math.random() * 20),
-    conversions: Math.floor(Math.random() * 3),
-  })),
-  last_30_days: Array.from({ length: 30 }, (_, i) => ({
-    date: daysAgo(29 - i),
-    calls: 3 + Math.floor(Math.random() * 10),
-    connected_calls: 2 + Math.floor(Math.random() * 7),
-    fatal_calls: Math.floor(Math.random() * 3),
-    quality_score_avg: 65 + Math.floor(Math.random() * 25),
-    conversions: Math.floor(Math.random() * 4),
-  })),
-};
-
-export const mockFailureBreakdown: AgentFailureBreakdown = {
-  fatal_reasons: [
-    { reason: "No answer", count: 12 },
-    { reason: "Busy", count: 7 },
-    { reason: "Wrong number", count: 3 },
-  ],
-  top_failed_qa_categories: [
-    { category: "Objection handling", count: 8 },
-    { category: "Closing", count: 5 },
-  ],
-  coaching_insights: [
-    "Focus on objection handling — most losses happen at the 2-minute mark.",
-    "Shorter openings correlated with higher connection rates.",
-  ],
-};
-
-export const mockConversionFunnel: AgentConversionFunnel = {
-  attempted: 48,
-  connected: 35,
-  qualified: 20,
-  converted: 12,
-  lost: 8,
-  conversion_rate: 34.3,
-};
 
 export const mockCallHistory: CallHistoryResponse = {
   ok: true,
   calls: [
-    { id: "h-1", call_id: "call-h-1", customer_name: "Sarah Johnson", phone_number: "+15552043311", status: "completed", campaign_name: "Q2 Outbound", started_at: new Date(Date.now() - 3600000).toISOString(), duration_seconds: 145 },
-    { id: "h-2", call_id: "call-h-2", customer_name: "Michael Torres", phone_number: "+15558710092", status: "no_answer", campaign_name: "Renewal Follow-up", started_at: new Date(Date.now() - 7200000).toISOString(), duration_seconds: 0 },
-    { id: "h-3", call_id: "call-h-3", customer_name: "Emily Chen", phone_number: "+15554397761", status: "completed", campaign_name: "Q2 Outbound", started_at: new Date(Date.now() - 86400000).toISOString(), duration_seconds: 210 },
+    {
+      id: "h-1",
+      call_id: "call-h-1",
+      customer_name: "Sarah Johnson",
+      phone_number: "+15552043311",
+      status: "completed",
+      campaign_name: "Q2 Outbound",
+      started_at: new Date(Date.now() - 3600000).toISOString(),
+      duration_seconds: 145,
+      handler: "human",
+      disposition: { id: "disp-1", code: "CONNECTED", name: "Connected" },
+    },
+    {
+      id: "h-2",
+      call_id: "call-h-2",
+      customer_name: "Michael Torres",
+      phone_number: "+15558710092",
+      status: "no_answer",
+      campaign_name: "Renewal Follow-up",
+      started_at: new Date(Date.now() - 7200000).toISOString(),
+      duration_seconds: 0,
+      handler: "ai",
+    },
+    {
+      id: "h-3",
+      call_id: "call-h-3",
+      customer_name: "Emily Chen",
+      phone_number: "+15554397761",
+      status: "completed",
+      campaign_name: "Q2 Outbound",
+      started_at: new Date(Date.now() - 86400000).toISOString(),
+      duration_seconds: 210,
+      handler: "human",
+      disposition: { id: "disp-1", code: "CONNECTED", name: "Connected" },
+    },
   ],
   summary: {
     total_calls: 48,

@@ -1,15 +1,70 @@
 export type Agent = {
   id: string;
+  user_id?: string;
+  tenant_id?: string | null;
   email: string;
-  full_name: string;
   role: string;
+  display_name?: string | null;
+  full_name?: string | null;
+  company_name?: string | null;
+  phone?: string | null;
+};
+
+export type LoginResponse = {
+  status: string;
+  data: {
+    user: {
+      id: string;
+      email: string;
+      tenant_id?: string | null;
+      full_name?: string | null;
+      display_name?: string | null;
+      company_name?: string | null;
+      phone?: string | null;
+      role: string;
+    };
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+    token_type: "bearer";
+  };
 };
 
 export type Campaign = {
   id: string;
   name: string;
   status: string;
-  lead_count: number;
+  handler?: string;
+  total_contacts?: number;
+  completed_contacts?: number;
+  pending_contacts?: number;
+  assigned_agents?: string[];
+  created_at?: string | null;
+  ai_config?: Record<string, unknown> | null;
+};
+
+export type CampaignListResponse = {
+  ok: boolean;
+  campaigns: Campaign[];
+  pagination?: { total?: number; page?: number; limit?: number };
+};
+
+export type CampaignContact = {
+  id: string;
+  campaign_id: string;
+  phone_number: string;
+  customer_name?: string | null;
+  state?: string;
+  assigned_agent_id?: string | null;
+  csv_payload?: Record<string, string> | null;
+  attempts?: number;
+};
+
+export type CampaignDetailResponse = {
+  ok: boolean;
+  campaign: Campaign;
+  contacts: CampaignContact[];
+  pagination?: { total?: number; page?: number; limit?: number };
 };
 
 export type Lead = {
@@ -18,129 +73,91 @@ export type Lead = {
   phone: string;
   status: string;
   email?: string;
+  campaign_id?: string;
+  attempts?: number;
 };
 
-export type CallSession = {
-  call_id: string;
-  lead_name: string;
-  phone: string;
+export function contactToLead(contact: CampaignContact): Lead {
+  const csv = contact.csv_payload || {};
+  const name = (contact.customer_name as string) || (csv.name as string) || (csv.customer_name as string) || "Unknown";
+  return {
+    id: contact.id,
+    name,
+    phone: contact.phone_number,
+    status: (contact.state || "pending").toLowerCase(),
+    email: (csv.email as string) || undefined,
+    campaign_id: contact.campaign_id,
+    attempts: contact.attempts || 0,
+  };
+}
+
+export type DispositionCatalogItem = {
+  id: string;
+  user_id?: string;
+  code: string;
+  name: string;
+  description?: string | null;
+  active: boolean;
+  requires_callback: boolean;
+  created_at?: string;
+  updated_at?: string;
 };
 
-export type Disposition = "Connected" | "No Answer" | "Busy" | "Call Later" | "Invalid";
+export type DispositionListResponse = {
+  ok: boolean;
+  dispositions: DispositionCatalogItem[];
+};
 
 export type DispositionPayload = {
-  outcome: Disposition;
-  notes?: string;
-  callback_time?: string;
-};
-
-export type AgentDashboardSummary = {
-  total_calls: number;
-  connected_calls: number;
-  failed_calls: number;
-  fatal_calls: number;
-  quality_score_avg: number;
-  conversion_count: number;
-  conversion_rate: number;
-  avg_call_duration: number;
-  talk_time_total: number;
-  followups_due: number;
-  lost_leads: number;
-  ghost_leads: number;
-  callbacks_booked: number;
-};
-
-export type AgentDashboardTrendPoint = {
-  date: string;
-  calls: number;
-  connected_calls: number;
-  fatal_calls: number;
-  quality_score_avg: number;
-  conversions: number;
-};
-
-export type AgentDashboardTrends = {
-  last_7_days: AgentDashboardTrendPoint[];
-  last_30_days: AgentDashboardTrendPoint[];
-};
-
-export type AgentFailureBreakdownItem = {
-  reason: string;
-  count: number;
-};
-
-export type AgentFailureCategoryItem = {
-  category: string;
-  count: number;
-};
-
-export type AgentFailureBreakdown = {
-  fatal_reasons: AgentFailureBreakdownItem[];
-  top_failed_qa_categories: AgentFailureCategoryItem[];
-  coaching_insights: string[];
-};
-
-export type AgentConversionFunnel = {
-  attempted: number;
-  connected: number;
-  qualified: number;
-  converted: number;
-  lost: number;
-  conversion_rate: number;
+  disposition_id: string | null;
+  notes?: string | null;
 };
 
 export type OutboundCallRequest = {
   phone_number: string;
   customer_name: string;
+  customer_id?: string;
+  handler?: "ai" | "human";
+  verification_context?: {
+    campaign_id?: string;
+    campaign_contact_id?: string;
+    assigned_agent_id?: string;
+    handler?: "ai" | "human";
+  };
+  initial_greeting?: string;
+  bot_system_prompt?: string;
+  voice_agent?: string;
+  tts_language?: string;
 };
 
 export type OutboundCallResponse = {
   success: boolean;
   call_id: string;
-  status: string;
+  status?: string;
   message?: string;
   provider?: string;
+  // backend may surface these in handler-specific responses:
+  agent_audio_ws_path?: string;
 };
 
 export type OutboundCallStatus = {
   call_id: string;
   status: string;
   phone_number: string;
-  duration_seconds?: number | null;
-  ended_at?: string | null;
-};
-
-export type HumanAgentCallRequest = {
-  phone_number: string;
-  customer_name: string;
-  provider?: "auto" | "livekit-sip" | "livekit-issabel";
-  campaign_id?: string;
-  lead_id?: string;
-};
-
-export type HumanAgentCallResponse = {
-  call_id: string;
-  room_name: string;
-  livekit_url: string;
-  agent_token: string;
-  agent_identity: string;
-  status: string;
-  provider: string;
-  phone_number: string;
-  customer_name: string;
-};
-
-export type HumanAgentCallStatus = {
-  call_id: string;
-  status: string;
-  phone_number: string;
-  room_name?: string | null;
-  provider?: string | null;
+  handler?: string | null;
+  call_requested_at?: string | null;
   sip_joined_at?: string | null;
-  agent_joined_at?: string | null;
+  first_bot_audio_at?: string | null;
+  first_user_audio_at?: string | null;
   started_at?: string | null;
   ended_at?: string | null;
   duration_seconds?: number | null;
+};
+
+export type CallDispositionRef = {
+  id: string;
+  code: string;
+  name: string;
 };
 
 export type CallHistoryItem = {
@@ -152,6 +169,11 @@ export type CallHistoryItem = {
   campaign_name?: string | null;
   started_at?: string | null;
   duration_seconds?: number | null;
+  handler?: string;
+  disposition_id?: string | null;
+  disposition?: CallDispositionRef | null;
+  wrapped_at?: string | null;
+  notes?: string | null;
 };
 
 export type CallHistorySummaryItem = {
@@ -165,9 +187,9 @@ export type CallHistorySummary = {
   total_calls: number;
   completed_calls: number;
   total_duration_seconds: number;
-  campaign_total_duration_seconds: number;
-  direct_total_duration_seconds: number;
-  campaign_breakdown: CallHistorySummaryItem[];
+  campaign_total_duration_seconds?: number;
+  direct_total_duration_seconds?: number;
+  campaign_breakdown?: CallHistorySummaryItem[];
 };
 
 export type CallHistoryPagination = {
@@ -184,16 +206,9 @@ export type CallHistoryResponse = {
   pagination: CallHistoryPagination;
 };
 
-export type CallHistoryDetail = {
-  id: string;
-  call_id: string;
-  customer_name: string;
-  phone_number: string;
-  campaign_name?: string | null;
-  started_at?: string | null;
+export type CallHistoryDetail = CallHistoryItem & {
   ended_at?: string | null;
   created_at?: string | null;
-  duration_seconds?: number | null;
   audio_url?: string | null;
   transcription?: string | null;
 };
@@ -202,3 +217,70 @@ export type CallHistoryDetailResponse = {
   ok: boolean;
   call: CallHistoryDetail;
 };
+
+export type ConversationEvent = {
+  call_id: string;
+  speaker?: string;
+  text?: string;
+  type?: string;
+  created_at?: string;
+  payload?: Record<string, unknown>;
+};
+
+export type ConversationResponse = {
+  ok: boolean;
+  events: ConversationEvent[];
+  booking?: Record<string, unknown> | null;
+};
+
+export type AgentStatusCode = {
+  id: string;
+  code: string;
+  label: string;
+  created_at?: string;
+};
+
+export type AgentStatusCodesResponse = {
+  ok: boolean;
+  codes: AgentStatusCode[];
+};
+
+export type AgentStatusCurrent = {
+  id: string;
+  user_id?: string;
+  agent_id?: string;
+  agent_status_id: string;
+  started_at: string;
+  ended_at?: string | null;
+  duration_seconds?: number | null;
+};
+
+export type AgentStatusCurrentResponse = {
+  ok: boolean;
+  current: AgentStatusCurrent | null;
+};
+
+export type AgentStatusSelectResponse = {
+  ok: boolean;
+  tracking_id: string;
+  started_at: string;
+};
+
+export type AgentStatusClearResponse = {
+  ok: boolean;
+  closed: boolean;
+};
+
+export type AgentStatusSummaryItem = {
+  code: string;
+  label: string;
+  duration_seconds: number;
+};
+
+export type AgentStatusSummaryResponse = {
+  ok: boolean;
+  summary: AgentStatusSummaryItem[];
+};
+
+// Disposition outcome used purely for UI grouping if no catalog code matches
+export type Disposition = "Connected" | "No Answer" | "Busy" | "Call Later" | "Invalid";

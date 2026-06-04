@@ -4,7 +4,7 @@ import type { Lead } from "../types";
 
 export type CampaignsStackParamList = {
   CampaignList: undefined;
-  Leads: { processId: string; processName: string };
+  Leads: { processId: string; processName: string; handler?: "ai" | "human" };
 };
 
 export type MainTabParamList = {
@@ -19,20 +19,20 @@ export type RootStackParamList = {
   Login: undefined;
   MainTabs: NavigatorScreenParams<MainTabParamList> | undefined;
   OutboundCall: { callId: string; phone: string; customerName: string };
+  /**
+   * Agent-talks-on-phone live call. WebSocket PCM bridge to the backend.
+   * Web target only — native needs additional audio integration.
+   */
   HumanCall: {
     callId: string;
     phone: string;
     customerName: string;
-    livekitUrl: string;
-    agentToken: string;
-    roomName: string;
   };
-  Call: { processId: string; processName: string; lead: Lead };
+  Call: { processId: string; processName: string; lead: Lead; handler?: "ai" | "human" };
   Disposition: {
     callId: string;
     lead: Lead;
     returnTo: "dial" | "leads";
-    callMode?: "dialer" | "human";
     processId?: string;
     processName?: string;
   };
@@ -46,4 +46,5 @@ export type RootStackParamList = {
     contactInitials: string;
     contactOnline: boolean;
   };
+  AgentStatus: undefined;
 };

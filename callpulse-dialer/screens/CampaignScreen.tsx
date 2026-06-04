@@ -2,10 +2,11 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import BreakTimeButton from "../components/BreakTimeButton";
 import { ScreenChrome, StatusPanel } from "../components/ui";
 import type { CampaignsStackParamList } from "../navigation/types";
 import { useRootNavigation } from "../navigation/useRootNavigation";
-import { AuthError, clearToken, getCampaigns, getMe, getToken } from "../services/api";
+import { AuthError, getCampaigns, getMe, getToken, logout } from "../services/api";
 import { theme } from "../theme";
 import type { Agent, Campaign } from "../types";
 
@@ -35,7 +36,6 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
       setCampaigns(list);
     } catch (e) {
       if (e instanceof AuthError) {
-        await clearToken();
         onLoggedOut();
         rootNavigation.replace("Login");
         return;
@@ -51,17 +51,17 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
   }, [load]);
 
   const initials = useMemo(() => {
-    const full = agent?.full_name || "";
+    const full = agent?.display_name || agent?.full_name || agent?.email || "";
     return full
-      .split(" ")
+      .split(/[\s@.]+/)
       .filter(Boolean)
       .slice(0, 2)
       .map((part) => part[0]?.toUpperCase())
       .join("");
-  }, [agent?.full_name]);
+  }, [agent]);
 
   const handleLogout = async () => {
-    await clearToken();
+    await logout();
     onLoggedOut();
     rootNavigation.replace("Login");
   };
@@ -80,19 +80,24 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
         <View style={styles.header}>
           <View style={styles.headerLeft}>
             <Text style={styles.title}>Campaigns</Text>
-            <Text style={styles.subtitle}>{agent?.full_name || "Agent"}</Text>
+            <Text style={styles.subtitle}>
+              {agent?.display_name || agent?.full_name || agent?.email || "Agent"}
+            </Text>
             <View style={styles.roleBadge}>
               <Text style={styles.roleBadgeText}>{(agent?.role || "agent").toUpperCase()}</Text>
             </View>
           </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Sign out"
-            onPress={handleLogout}
-            style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
-          >
-            <Text style={styles.avatarText}>{initials || "AG"}</Text>
-          </Pressable>
+          <View style={styles.headerActions}>
+            <BreakTimeButton onPress={() => rootNavigation.navigate("AgentStatus")} compact />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sign out"
+              onPress={handleLogout}
+              style={({ pressed }) => [styles.avatar, pressed && styles.pressed]}
+            >
+              <Text style={styles.avatarText}>{initials || "AG"}</Text>
+            </Pressable>
+          </View>
         </View>
 
         {loading || error ? (
@@ -107,12 +112,19 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
             contentContainerStyle={styles.listContent}
             ListEmptyComponent={<StatusPanel empty="No campaigns assigned yet." />}
             renderItem={({ item }) => {
-              const active = item.status.toLowerCase() === "active";
+              const active = (item.status || "").toLowerCase() === "active";
+              const total = item.total_contacts ?? 0;
+              const completed = item.completed_contacts ?? 0;
+              const pending = item.pending_contacts ?? Math.max(0, total - completed);
               return (
                 <Pressable
                   style={({ pressed }) => [styles.campaignCard, pressed && styles.pressed]}
                   onPress={() =>
-                    navigation.navigate("Leads", { processId: item.id, processName: item.name })
+                    navigation.navigate("Leads", {
+                      processId: item.id,
+                      processName: item.name,
+                      handler: (item.handler as "ai" | "human") || undefined,
+                    })
                   }
                 >
                   <Text style={styles.cardTitle} numberOfLines={2}>
@@ -120,10 +132,13 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
                   </Text>
                   <View style={[styles.statusBadge, active ? styles.statusActive : styles.statusPaused]}>
                     <Text style={[styles.statusText, active ? styles.statusTextActive : styles.statusTextPaused]}>
-                      {active ? "Active" : "Paused"}
+                      {active ? "Active" : (item.status || "Paused")}
                     </Text>
                   </View>
-                  <Text style={styles.leadCount}>{item.lead_count} leads</Text>
+                  <Text style={styles.leadCount}>{pending} pending · {total} total</Text>
+                  {item.handler ? (
+                    <Text style={styles.handlerTag}>{item.handler === "human" ? "Live agent" : "AI agent"}</Text>
+                  ) : null}
                 </Pressable>
               );
             }}
@@ -163,6 +178,11 @@ const styles = StyleSheet.create({
   headerLeft: {
     flex: 1,
     minWidth: 0,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: theme.spacing.sm,
   },
   title: {
     fontSize: theme.fontSize.xl,
@@ -256,5 +276,13 @@ const styles = StyleSheet.create({
     fontSize: theme.fontSize.sm,
     fontWeight: theme.fontWeight.medium,
     color: theme.colors.textSecondary,
+  },
+  handlerTag: {
+    marginTop: theme.spacing.xs,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.primary,
+    fontWeight: theme.fontWeight.semibold,
+    textTransform: "uppercase",
+    letterSpacing: theme.letterSpacing.wide,
   },
 });

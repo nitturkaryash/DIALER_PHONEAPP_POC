@@ -3,21 +3,24 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { Feather } from "@expo/vector-icons";
 
 import { theme } from "../theme";
 
+type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
+
 type TabConfig = {
   label: string;
-  short: string;
+  icon: FeatherIconName;
   emphasize?: boolean;
 };
 
 const TAB_CONFIG: Record<string, TabConfig> = {
-  Dashboard: { label: "Home", short: "H" },
-  Dial: { label: "Dial", short: "D", emphasize: true },
-  Chats: { label: "Chats", short: "💬" },
-  CallHistory: { label: "History", short: "L" },
-  Campaigns: { label: "Campaigns", short: "C" },
+  Dashboard: { label: "Home", icon: "home" },
+  Dial: { label: "Dial", icon: "phone", emphasize: true },
+  Chats: { label: "Chats", icon: "message-circle" },
+  CallHistory: { label: "History", icon: "clock" },
+  Campaigns: { label: "Campaigns", icon: "target" },
 };
 
 export default function AppTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
@@ -28,7 +31,7 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
     <View style={[styles.wrap, { paddingBottom: bottomInset }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
-        const config = TAB_CONFIG[route.name] ?? { label: route.name, short: route.name[0] ?? "•" };
+        const config = TAB_CONFIG[route.name] ?? { label: route.name, icon: "circle" as FeatherIconName };
         const { options } = descriptors[route.key];
 
         const onPress = () => {
@@ -49,6 +52,12 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
           }
         };
 
+        const iconColor = focused
+          ? config.emphasize
+            ? "#fff"
+            : theme.colors.primary
+          : theme.colors.textTertiary;
+
         return (
           <Pressable
             key={route.key}
@@ -62,10 +71,11 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
               style={[
                 styles.iconWrap,
                 config.emphasize && styles.iconWrapEmphasized,
-                focused && styles.iconWrapActive,
+                focused && !config.emphasize && styles.iconWrapActive,
+                focused && config.emphasize && styles.iconWrapEmphasizedActive,
               ]}
             >
-              <Text style={[styles.icon, focused && styles.iconActive]}>{config.short}</Text>
+              <Feather name={config.icon} size={config.emphasize ? 22 : 20} color={iconColor} />
             </View>
             <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
               {config.label}
@@ -97,28 +107,24 @@ const styles = StyleSheet.create({
     opacity: 0.85,
   },
   iconWrap: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: theme.radius.base,
     alignItems: "center",
     justifyContent: "center",
   },
   iconWrapEmphasized: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.full,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: theme.colors.surfaceMuted,
+  },
+  iconWrapEmphasizedActive: {
+    backgroundColor: theme.colors.primary,
+    ...theme.shadow.button,
   },
   iconWrapActive: {
     backgroundColor: theme.colors.primarySoft,
-  },
-  icon: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.textTertiary,
-  },
-  iconActive: {
-    color: theme.colors.primary,
   },
   label: {
     marginTop: 2,

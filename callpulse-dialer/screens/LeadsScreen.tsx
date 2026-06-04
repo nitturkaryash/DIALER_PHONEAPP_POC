@@ -1,11 +1,13 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { CampaignsStackParamList } from "../navigation/types";
 import { useRootNavigation } from "../navigation/useRootNavigation";
-import { AuthError, clearToken, getLeads, getToken } from "../services/api";
+import { AuthError, getLeads, getToken } from "../services/api";
+import { useAgentStatus } from "../state/AgentStatusContext";
 import { theme } from "../theme";
 import type { Lead } from "../types";
 
@@ -13,7 +15,8 @@ type Props = NativeStackScreenProps<CampaignsStackParamList, "Leads">;
 
 export default function LeadsScreen({ route, navigation }: Props) {
   const rootNavigation = useRootNavigation();
-  const { processId, processName } = route.params;
+  const { processId, processName, handler } = route.params;
+  const { isOnBreak } = useAgentStatus();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
@@ -32,7 +35,6 @@ export default function LeadsScreen({ route, navigation }: Props) {
       setLeads(data);
     } catch (e) {
       if (e instanceof AuthError) {
-        await clearToken();
         rootNavigation.replace("Login");
         return;
       }
@@ -54,6 +56,14 @@ export default function LeadsScreen({ route, navigation }: Props) {
     );
   }, [leads, query]);
 
+  const handleCall = (item: Lead) => {
+    if (isOnBreak) {
+      setError("End your break before placing a call.");
+      return;
+    }
+    rootNavigation.navigate("Call", { processId, processName, lead: item, handler });
+  };
+
   return (
     <LinearGradient
       colors={theme.colors.backgroundGradient}
@@ -62,7 +72,6 @@ export default function LeadsScreen({ route, navigation }: Props) {
       style={styles.gradient}
     >
       <View style={styles.container}>
-        {/* Header with proper 40×40 back icon button */}
         <View style={styles.header}>
           <TouchableOpacity
             activeOpacity={0.85}
@@ -71,16 +80,22 @@ export default function LeadsScreen({ route, navigation }: Props) {
             accessibilityRole="button"
             accessibilityLabel="Back to campaigns"
           >
-            <Text style={styles.backIcon}>←</Text>
+            <Feather name="arrow-left" size={20} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.title} numberOfLines={1}>
-            {processName}
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.title} numberOfLines={1}>
+              {processName}
+            </Text>
+            {handler ? (
+              <Text style={styles.subtitle}>
+                {handler === "human" ? "Live agent dial" : "AI bot dial"}
+              </Text>
+            ) : null}
+          </View>
         </View>
 
-        {/* Search bar — 48px height, pill radius per design profile */}
         <View style={styles.searchWrap}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <Feather name="search" size={16} color={theme.colors.textTertiary} />
           <TextInput
             value={query}
             onChangeText={setQuery}
@@ -88,7 +103,20 @@ export default function LeadsScreen({ route, navigation }: Props) {
             placeholderTextColor={theme.colors.textTertiary}
             style={styles.searchInput}
           />
+          {query.length > 0 ? (
+            <TouchableOpacity onPress={() => setQuery("")} hitSlop={8}>
+              <Feather name="x" size={16} color={theme.colors.textTertiary} />
+            </TouchableOpacity>
+          ) : null}
         </View>
+
+        {isOnBreak ? (
+          <View style={styles.breakBanner}>
+            <Text style={styles.breakBannerText}>
+              You're on break — end the break before dialing.
+            </Text>
+          </View>
+        ) : null}
 
         {loading ? (
           <View style={styles.center}>
@@ -124,12 +152,11 @@ export default function LeadsScreen({ route, navigation }: Props) {
                     />
                     <TouchableOpacity
                       activeOpacity={0.85}
-                      style={styles.callBtn}
-                      onPress={() =>
-                        rootNavigation.navigate("Call", { processId, processName, lead: item })
-                      }
+                      style={[styles.callBtn, isOnBreak && styles.callBtnDisabled]}
+                      disabled={isOnBreak}
+                      onPress={() => handleCall(item)}
                     >
-                      <Text style={styles.callIcon}>📞</Text>
+                      <Feather name="phone" size={18} color="#fff" />
                     </TouchableOpacity>
                   </View>
                 </View>
@@ -152,7 +179,6 @@ const styles = StyleSheet.create({
     marginBottom: theme.spacing.lg,
     gap: theme.spacing.md,
   },
-  // 40×40 rounded icon button (design profile: icon_button spec)
   backBtn: {
     width: 40,
     height: 40,
@@ -162,18 +188,18 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...theme.shadow.card,
   },
-  backIcon: {
-    fontSize: theme.fontSize.lg,
-    color: theme.colors.textPrimary,
-    lineHeight: 22,
-  },
   title: {
-    flex: 1,
     fontSize: theme.fontSize.lg,
     fontWeight: theme.fontWeight.semibold,
     color: theme.colors.textPrimary,
   },
-  // search bar: 48px height, pill radius (design profile spec)
+  subtitle: {
+    marginTop: 2,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.textSecondary,
+    textTransform: "uppercase",
+    letterSpacing: theme.letterSpacing.wide,
+  },
   searchWrap: {
     height: 48,
     borderRadius: theme.radius.full,
@@ -181,21 +207,32 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: theme.spacing.lg,
+    gap: theme.spacing.sm,
     marginBottom: theme.spacing.lg,
     ...theme.shadow.card,
   },
-  searchIcon: { marginRight: theme.spacing.sm, fontSize: theme.fontSize.base },
   searchInput: {
     flex: 1,
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.base,
     paddingVertical: 0,
   },
+  breakBanner: {
+    backgroundColor: theme.colors.warningSoft,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+  },
+  breakBannerText: {
+    color: theme.colors.warning,
+    fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.medium,
+  },
   center: { flex: 1, alignItems: "center", justifyContent: "center" },
   listContent: { paddingBottom: theme.spacing["3xl"] },
   card: {
     backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.xl,     // fixed: xl (24px) per profile
+    borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginBottom: theme.spacing.md,
     flexDirection: "row",
@@ -220,11 +257,13 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: theme.radius.md,
-    backgroundColor: theme.colors.accent,
+    backgroundColor: theme.colors.primary,
     justifyContent: "center",
     alignItems: "center",
   },
-  callIcon: { fontSize: 18 },
+  callBtnDisabled: {
+    opacity: 0.45,
+  },
   error: { color: theme.colors.error, fontSize: theme.fontSize.sm },
   retryBtn: {
     marginTop: theme.spacing.md,
