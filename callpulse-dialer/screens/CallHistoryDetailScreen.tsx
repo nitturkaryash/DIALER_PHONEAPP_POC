@@ -7,9 +7,11 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
+import { Feather } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { CallRecordingSection } from "../components/CallRecordingSection";
+import { ScreenChrome } from "../components/ui";
 import type { RootStackParamList } from "../navigation/types";
 import { AuthError, clearToken, getCallHistoryDetail, getToken } from "../services/api";
 import { theme } from "../theme";
@@ -74,13 +76,13 @@ export default function CallHistoryDetailScreen({ route, navigation }: Props) {
   }, [load]);
 
   return (
-    <LinearGradient colors={theme.colors.backgroundGradient} start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }} style={styles.gradient}>
-      <ScrollView contentContainerStyle={styles.container}>
+    <ScreenChrome>
+      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
         <View style={styles.headerRow}>
           <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()} activeOpacity={0.9}>
-            <Text style={styles.backText}>Back</Text>
+            <Feather name="arrow-left" size={20} color={theme.colors.textPrimary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Call Detail</Text>
+          <Text style={styles.headerTitle}>Call detail</Text>
           <View style={styles.backButtonPlaceholder} />
         </View>
 
@@ -122,6 +124,8 @@ export default function CallHistoryDetailScreen({ route, navigation }: Props) {
               </View>
             </View>
 
+            <CallRecordingSection audioUrl={detail.audio_url} />
+
             <View style={styles.card}>
               <Text style={styles.sectionTitle}>Transcript</Text>
               <Text style={styles.transcriptText}>
@@ -131,12 +135,11 @@ export default function CallHistoryDetailScreen({ route, navigation }: Props) {
           </>
         ) : null}
       </ScrollView>
-    </LinearGradient>
+    </ScreenChrome>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
   container: {
     paddingHorizontal: theme.spacing.screen,
     paddingTop: theme.spacing.xl,
@@ -154,20 +157,18 @@ const styles = StyleSheet.create({
     color: theme.colors.textPrimary,
   },
   backButton: {
-    minWidth: 56,
-    borderRadius: theme.radius.full,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: theme.colors.card,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   backButtonPlaceholder: {
-    minWidth: 56,
-  },
-  backText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    fontWeight: "600",
+    width: 40,
   },
   center: {
     alignItems: "center",
@@ -179,6 +180,8 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginTop: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   name: {

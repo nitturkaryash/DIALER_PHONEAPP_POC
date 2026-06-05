@@ -1,38 +1,36 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Animated,
+  ActivityIndicator,
   FlatList,
   KeyboardAvoidingView,
   Platform,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { Ionicons } from "@expo/vector-icons";
 
-import { mockChats, formatTime, type ChatMessage } from "../services/chatData";
+import { formatTime, type ChatMessage } from "../services/chatData";
+import {
+  fetchUltraChatHistory,
+  markUltraChatRead,
+  mergeChatMessages,
+  messageFromStreamPayload,
+  normalizeWhatsAppPhone,
+  phoneFromStreamPayload,
+  sendUltraChatText,
+  subscribeUltraChatStream,
+} from "../services/ultrachatChatApi";
 import type { RootStackParamList } from "../navigation/types";
 import { theme } from "../theme";
 
-const QUICK_TEMPLATES = [
-  { id: "t1", label: "Policy Renewal", text: "Hi, your policy is up for renewal soon. Would you like to renew it today? I can walk you through the process." },
-  { id: "t2", label: "Intro Call", text: "Hi, this is your advisor from CallPulse. Is this a good time to talk about your insurance coverage?" },
-  { id: "t3", label: "Claim Status", text: "Your claim is currently under review. You will receive an update within 48 hours. Thank you for your patience." },
-  { id: "t4", label: "Thank You", text: "Thank you for your time today. We will follow up with the details shortly." },
-  { id: "t5", label: "Schedule Call", text: "I would like to schedule a call to discuss your policy in detail. What time works best for you?" },
-];
-
-const MOCK_LEAD_CONTEXT = {
-  stage: "Hot Lead",
-  stageColor: "#22C55E",
-  lastCall: "Yesterday · 4m 32s · Interested",
-  nextAction: "Follow up by Fri 30 May",
-};
+const chat = theme.colors.chat;
 
 type Props = NativeStackScreenProps<RootStackParamList, "ChatDetail">;
 
@@ -41,9 +39,7 @@ function Bubble({ msg }: { msg: ChatMessage }) {
   return (
     <View style={[styles.bubbleWrap, isOut ? styles.bubbleWrapOut : styles.bubbleWrapIn]}>
       <View style={[styles.bubble, isOut ? styles.bubbleOut : styles.bubbleIn]}>
-        <Text style={[styles.bubbleText, isOut ? styles.bubbleTextOut : styles.bubbleTextIn]}>
-          {msg.text}
-        </Text>
+        <Text style={styles.bubbleText}>{msg.text}</Text>
         <View style={styles.bubbleMeta}>
           <Text style={styles.bubbleTime}>{formatTime(msg.timestamp)}</Text>
           {isOut && (
@@ -70,60 +66,112 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
   const insets = useSafeAreaInsets();
   const flatRef = useRef<FlatList>(null);
 
-  const contact = mockChats.find((c) => c.id === contactId);
-  const [messages, setMessages] = useState<ChatMessage[]>(contact?.messages ?? []);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState("");
 
-  const [showTemplates, setShowTemplates] = useState(false);
-  const templateAnim = useRef(new Animated.Value(0)).current;
+  const loadHistory = useCallback(
+    async (opts?: { silent?: boolean; scrollEnd?: boolean; merge?: boolean }) => {
+      const silent = opts?.silent ?? false;
+      const scrollEnd = opts?.scrollEnd ?? !silent;
+      const merge = opts?.merge ?? false;
+      try {
+        if (!silent) setLoading(true);
+        setError("");
+        const history = await fetchUltraChatHistory(contactId);
+        let shouldScroll = scrollEnd;
+        setMessages((prev) => {
+          const next = merge ? mergeChatMessages(prev, history) : history;
+          const prevLast = prev[prev.length - 1]?.id;
+          const nextLast = next[next.length - 1]?.id;
+          if (merge && prevLast === nextLast && prev.length === next.length) {
+            shouldScroll = false;
+            return prev;
+          }
+          return next;
+        });
+        await markUltraChatRead(contactId);
+        if (shouldScroll) {
+          setTimeout(() => flatRef.current?.scrollToEnd({ animated: merge }), 100);
+        }
+      } catch (e) {
+        if (!silent) setError(e instanceof Error ? e.message : "Failed to load messages");
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [contactId]
+  );
 
-  const [showLeadPanel, setShowLeadPanel] = useState(false);
-  const leadPanelHeight = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    void loadHistory({ silent: false, scrollEnd: true });
+  }, [loadHistory]);
 
-  const send = useCallback(() => {
+  useEffect(() => {
+    const sub = subscribeUltraChatStream({
+      onEvent: (_name, payload) => {
+        const phone = phoneFromStreamPayload(payload);
+        if (!phone || normalizeWhatsAppPhone(phone) !== normalizeWhatsAppPhone(contactId)) return;
+        const msg = messageFromStreamPayload(payload);
+        if (!msg) {
+          void loadHistory({ silent: true, scrollEnd: true });
+          return;
+        }
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          if (msg.fromMe) {
+            const withoutOptimistic = prev.filter(
+              (m) => !(m.fromMe && m.id.startsWith("local-") && m.text === msg.text)
+            );
+            if (withoutOptimistic.some((m) => m.id === msg.id)) return withoutOptimistic;
+            return [...withoutOptimistic, msg];
+          }
+          return [...prev, msg];
+        });
+        void markUltraChatRead(contactId);
+        setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
+      },
+      onError: () => {
+        void loadHistory({ silent: true, scrollEnd: false });
+      },
+    });
+
+    return () => sub.close();
+  }, [contactId, loadHistory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const poll = setInterval(() => {
+        void loadHistory({ silent: true, scrollEnd: true, merge: true });
+      }, 4000);
+      return () => clearInterval(poll);
+    }, [loadHistory])
+  );
+
+  const send = useCallback(async () => {
     const text = input.trim();
-    if (!text) return;
-    const newMsg: ChatMessage = {
-      id: `msg-${Date.now()}`,
+    if (!text || sending) return;
+    const optimistic: ChatMessage = {
+      id: `local-${Date.now()}`,
       text,
       fromMe: true,
       timestamp: new Date().toISOString(),
       status: "sent",
     };
-    setMessages((prev) => [...prev, newMsg]);
+    setMessages((prev) => [...prev, optimistic]);
     setInput("");
+    setSending(true);
     setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
-  }, [input]);
-
-  const toggleTemplates = () => {
-    const toValue = showTemplates ? 0 : 1;
-    setShowTemplates(!showTemplates);
-    Animated.timing(templateAnim, {
-      toValue,
-      duration: 180,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const applyTemplate = (text: string) => {
-    setInput(text);
-    setShowTemplates(false);
-    Animated.timing(templateAnim, {
-      toValue: 0,
-      duration: 150,
-      useNativeDriver: true,
-    }).start();
-  };
-
-  const toggleLeadPanel = () => {
-    const toValue = showLeadPanel ? 0 : 72;
-    setShowLeadPanel(!showLeadPanel);
-    Animated.timing(leadPanelHeight, {
-      toValue,
-      duration: 200,
-      useNativeDriver: false,
-    }).start();
-  };
+    try {
+      await sendUltraChatText(contactId, text);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Send failed");
+    } finally {
+      setSending(false);
+    }
+  }, [contactId, input, sending]);
 
   return (
     <KeyboardAvoidingView
@@ -131,52 +179,40 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
     >
-      {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          <Feather name="arrow-left" size={22} color="#fff" />
         </Pressable>
         <View style={styles.headerAvatar}>
           <Text style={styles.headerAvatarText}>{contactInitials}</Text>
           {contactOnline && <View style={styles.headerOnlineDot} />}
         </View>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerName}>{contactName}</Text>
-          <Text style={styles.headerSub}>{contactOnline ? "online" : contactPhone}</Text>
+          <Text style={styles.headerName} numberOfLines={1}>
+            {contactName}
+          </Text>
+          <Text style={styles.headerSub}>{contactOnline ? "Online" : contactPhone}</Text>
         </View>
-        <View style={styles.headerActions}>
-          <Ionicons name="call-outline" size={22} color="#FFFFFF" />
-        </View>
-        <Pressable onPress={toggleLeadPanel} style={styles.leadToggleBtn}>
-          <Ionicons
-            name={showLeadPanel ? "chevron-up" : "chevron-down"}
-            size={18}
-            color="#FFFFFF"
-          />
+        <Pressable
+          onPress={() => void loadHistory({ silent: true, scrollEnd: true })}
+          style={styles.headerActions}
+        >
+          <Feather name="refresh-cw" size={20} color="#fff" />
         </Pressable>
       </View>
 
-      {/* Lead context panel */}
-      <Animated.View style={[styles.leadPanel, { height: leadPanelHeight }]}>
-        <View style={styles.leadPanelInner}>
-          <View style={[styles.leadStageBadge, { backgroundColor: MOCK_LEAD_CONTEXT.stageColor + "22" }]}>
-            <Text style={[styles.leadStageText, { color: MOCK_LEAD_CONTEXT.stageColor }]}>
-              {MOCK_LEAD_CONTEXT.stage}
-            </Text>
-          </View>
-          <View style={styles.leadMeta}>
-            <Text style={styles.leadMetaLabel}>Last call</Text>
-            <Text style={styles.leadMetaValue}>{MOCK_LEAD_CONTEXT.lastCall}</Text>
-          </View>
-          <View style={styles.leadMeta}>
-            <Text style={styles.leadMetaLabel}>Next</Text>
-            <Text style={styles.leadMetaValue}>{MOCK_LEAD_CONTEXT.nextAction}</Text>
-          </View>
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Feather name="alert-circle" size={14} color={theme.colors.error} />
+          <Text style={styles.errorBannerText}>{error}</Text>
         </View>
-      </Animated.View>
+      ) : null}
 
-      {/* Messages + Input bar */}
-      <View style={{ flex: 1 }}>
+      {loading ? (
+        <View style={styles.centered}>
+          <ActivityIndicator color={chat.header} />
+        </View>
+      ) : (
         <FlatList
           ref={flatRef}
           data={messages}
@@ -185,258 +221,165 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.messageContent}
           onLayout={() => flatRef.current?.scrollToEnd({ animated: false })}
           renderItem={({ item }) => <Bubble msg={item} />}
+          ListEmptyComponent={
+            <View style={styles.centered}>
+              <Text style={styles.emptyHint}>No messages yet — say hello</Text>
+            </View>
+          }
         />
+      )}
 
-        {/* Quick reply template picker */}
-        {showTemplates && (
-          <Animated.View
-            style={[
-              styles.templateRow,
-              {
-                opacity: templateAnim,
-                transform: [
-                  {
-                    translateY: templateAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [20, 0],
-                    }),
-                  },
-                ],
-              },
-            ]}
-          >
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.templateScroll}
-            >
-              {QUICK_TEMPLATES.map((t) => (
-                <Pressable
-                  key={t.id}
-                  style={({ pressed }) => [styles.templatePill, pressed && styles.templatePillPressed]}
-                  onPress={() => applyTemplate(t.text)}
-                >
-                  <Text style={styles.templatePillText}>{t.label}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </Animated.View>
-        )}
-
-        {/* Input bar */}
-        <View style={[styles.inputWrap, { paddingBottom: insets.bottom + 8 }]}>
-          <View style={styles.inputBar}>
-            <Pressable onPress={toggleTemplates} style={styles.templateBtn}>
-              <Ionicons
-                name={showTemplates ? "flash" : "flash-outline"}
-                size={20}
-                color={showTemplates ? theme.colors.primary : theme.colors.textSecondary}
-              />
-            </Pressable>
-            <TextInput
-              style={styles.input}
-              placeholder="Message"
-              placeholderTextColor={theme.colors.textSecondary}
-              value={input}
-              onChangeText={setInput}
-              multiline
-              maxLength={1000}
-              onSubmitEditing={send}
-              blurOnSubmit={false}
-              returnKeyType={Platform.OS === "web" ? "default" : "send"}
-            />
-          </View>
-          <Pressable
-            onPress={send}
-            style={({ pressed }) => [styles.sendBtn, pressed && styles.sendBtnPressed]}
-          >
-            {input.trim()
-              ? <Ionicons name="send" size={18} color="#FFFFFF" />
-              : <Ionicons name="mic-outline" size={20} color="#FFFFFF" />
-            }
-          </Pressable>
+      <View style={[styles.inputWrap, { paddingBottom: insets.bottom + 8 }]}>
+        <View style={styles.inputBar}>
+          <TextInput
+            style={styles.input}
+            placeholder="Type a message"
+            placeholderTextColor={theme.colors.textTertiary}
+            value={input}
+            onChangeText={setInput}
+            multiline
+            maxLength={1000}
+            editable={!sending}
+            onSubmitEditing={() => void send()}
+            blurOnSubmit={false}
+            returnKeyType={Platform.OS === "web" ? "default" : "send"}
+          />
         </View>
+        <Pressable
+          onPress={() => void send()}
+          disabled={sending || !input.trim()}
+          style={({ pressed }) => [
+            styles.sendBtn,
+            (!input.trim() || sending) && styles.sendBtnDisabled,
+            pressed && styles.sendBtnPressed,
+          ]}
+        >
+          {sending ? (
+            <ActivityIndicator color="#fff" size="small" />
+          ) : (
+            <Feather name="send" size={20} color="#fff" />
+          )}
+        </Pressable>
       </View>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: theme.colors.bg },
-
+  container: { flex: 1, backgroundColor: chat.wallpaper },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
+  emptyHint: { fontSize: theme.fontSize.base, color: theme.colors.textSecondary, textAlign: "center" },
   header: {
-    backgroundColor: theme.colors.primary,
-    paddingHorizontal: 12,
-    paddingBottom: 12,
+    backgroundColor: chat.header,
+    paddingHorizontal: theme.spacing.md,
+    paddingBottom: theme.spacing.md,
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: theme.spacing.sm,
   },
-  backBtn: { padding: 4 },
-
-  headerAvatar: {
+  backBtn: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(255,255,255,0.25)",
     alignItems: "center",
     justifyContent: "center",
   },
-  headerAvatarText: { fontSize: 15, fontWeight: "700", color: "#FFFFFF" },
+  headerAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  headerAvatarText: { fontSize: theme.fontSize.base, fontWeight: theme.fontWeight.bold, color: "#fff" },
   headerOnlineDot: {
     position: "absolute",
-    right: 1,
-    bottom: 1,
-    width: 11,
-    height: 11,
+    right: 0,
+    bottom: 0,
+    width: 12,
+    height: 12,
     borderRadius: 6,
-    backgroundColor: theme.colors.success,
+    backgroundColor: chat.online,
     borderWidth: 2,
-    borderColor: theme.colors.primary,
+    borderColor: chat.header,
   },
-
-  headerInfo: { flex: 1 },
-  headerName: { fontSize: 16, fontWeight: "700", color: "#FFFFFF" },
-  headerSub: { fontSize: 12, color: "rgba(255,255,255,0.75)", marginTop: 1 },
-
-  headerActions: { flexDirection: "row", gap: 8 },
-
-  leadToggleBtn: {
-    padding: 4,
+  headerInfo: { flex: 1, minWidth: 0 },
+  headerName: { fontSize: theme.fontSize.md, fontWeight: theme.fontWeight.bold, color: "#fff" },
+  headerSub: { fontSize: theme.fontSize.sm, color: "rgba(255,255,255,0.75)", marginTop: 2 },
+  headerActions: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
   },
-
-  leadPanel: {
-    backgroundColor: "#FFFFFF",
-    overflow: "hidden",
-    borderBottomWidth: 1,
-    borderBottomColor: theme.colors.border,
-  },
-  leadPanelInner: {
+  errorBanner: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    gap: 12,
+    gap: theme.spacing.sm,
+    backgroundColor: theme.colors.errorSoft,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
-  leadStageBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 20,
-  },
-  leadStageText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  leadMeta: {
-    flexDirection: "column",
-    gap: 1,
-  },
-  leadMetaLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: theme.colors.textSecondary,
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
-  },
-  leadMetaValue: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: theme.colors.textPrimary,
-  },
-
+  errorBannerText: { flex: 1, fontSize: theme.fontSize.sm, color: theme.colors.error },
   messageList: { flex: 1 },
-  messageContent: { paddingHorizontal: 12, paddingVertical: 16, gap: 4 },
-
+  messageContent: { paddingHorizontal: theme.spacing.md, paddingVertical: theme.spacing.lg, gap: 6 },
   bubbleWrap: { flexDirection: "row", marginVertical: 2 },
   bubbleWrapOut: { justifyContent: "flex-end" },
   bubbleWrapIn: { justifyContent: "flex-start" },
-
   bubble: {
-    maxWidth: "75%",
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.07,
-    shadowRadius: 2,
-    elevation: 1,
+    maxWidth: "78%",
+    borderRadius: theme.radius.lg,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm + 2,
+    ...theme.shadow.card,
   },
   bubbleOut: {
-    backgroundColor: "rgba(27, 77, 140, 0.15)",
-    borderTopRightRadius: 4,
+    backgroundColor: chat.bubbleOut,
+    borderBottomRightRadius: theme.radius.sm,
   },
   bubbleIn: {
-    backgroundColor: theme.colors.card,
-    borderTopLeftRadius: 4,
+    backgroundColor: chat.bubbleIn,
+    borderBottomLeftRadius: theme.radius.sm,
   },
-  bubbleText: { fontSize: 15, lineHeight: 21 },
-  bubbleTextOut: { color: theme.colors.textPrimary },
-  bubbleTextIn: { color: theme.colors.textPrimary },
-
-  bubbleMeta: { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", gap: 4, marginTop: 4 },
-  bubbleTime: { fontSize: 11, color: theme.colors.textSecondary },
-
-  templateRow: {
-    backgroundColor: "#FFFFFF",
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
-    paddingVertical: 10,
+  bubbleText: {
+    fontSize: theme.fontSize.base,
+    lineHeight: 22,
+    color: theme.colors.textPrimary,
   },
-  templateScroll: {
-    paddingHorizontal: 12,
-    gap: 8,
+  bubbleMeta: {
     flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 4,
+    marginTop: 4,
   },
-  templatePill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: theme.colors.primary,
-    backgroundColor: "#FFFFFF",
-  },
-  templatePillPressed: {
-    opacity: 0.65,
-  },
-  templatePillText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: theme.colors.primary,
-  },
-
+  bubbleTime: { fontSize: theme.fontSize.xs, color: theme.colors.textTertiary },
+  tick: { fontSize: theme.fontSize.sm, color: theme.colors.textTertiary },
+  tickRead: { color: theme.colors.primary },
   inputWrap: {
     flexDirection: "row",
     alignItems: "flex-end",
-    paddingHorizontal: 10,
-    paddingTop: 8,
-    backgroundColor: theme.colors.surfaceMuted,
-    gap: 8,
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    backgroundColor: theme.colors.card,
+    borderTopWidth: 1,
+    borderTopColor: theme.colors.border,
+    gap: theme.spacing.sm,
   },
   inputBar: {
     flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: theme.colors.card,
-    borderRadius: 24,
-    paddingHorizontal: 10,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderRadius: theme.radius.full,
+    paddingHorizontal: theme.spacing.lg,
     paddingVertical: Platform.OS === "web" ? 10 : 8,
     minHeight: 44,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  templateBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
     justifyContent: "center",
   },
   input: {
-    flex: 1,
-    fontSize: 15,
+    fontSize: theme.fontSize.base,
     color: theme.colors.textPrimary,
     maxHeight: 100,
     ...(Platform.OS === "web" ? ({ outlineStyle: "none" } as object) : {}),
@@ -445,14 +388,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: theme.colors.primary,
+    backgroundColor: chat.header,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
+    ...theme.shadow.button,
   },
-  sendBtnPressed: { opacity: 0.8 },
+  sendBtnDisabled: { opacity: 0.45 },
+  sendBtnPressed: { opacity: 0.85 },
 });

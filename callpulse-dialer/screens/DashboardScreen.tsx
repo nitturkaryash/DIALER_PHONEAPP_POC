@@ -1,8 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
-  Modal,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,29 +9,34 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { ScreenChrome } from "../components/ui";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 import type { CompositeScreenProps } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
+import { LinearGradient } from "expo-linear-gradient";
+
+import BreakTimeButton from "../components/BreakTimeButton";
+import { HomeContactsSection } from "../components/HomeContactsSection";
+import { BadgeChip, PrimaryButton, ScreenChrome, ScreenHeader } from "../components/ui";
+import { useRootNavigation } from "../navigation/useRootNavigation";
+import type { ChatContact } from "../services/chatData";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import {
   AuthError,
-  clearToken,
-  getAgentConversionFunnel,
-  getAgentDashboardSummary,
-  getAgentDashboardTrends,
-  getAgentFailureBreakdown,
+  getAgentStatusSummary,
+  getCallHistory,
+  getCampaigns,
   getMe,
   getToken,
+  logout,
 } from "../services/api";
 import { theme } from "../theme";
 import type {
   Agent,
-  AgentConversionFunnel,
-  AgentDashboardSummary,
-  AgentDashboardTrendPoint,
-  AgentFailureBreakdown,
+  AgentStatusSummaryItem,
+  Campaign,
+  CallHistoryItem,
+  CallHistorySummary,
 } from "../types";
 
 type Props = CompositeScreenProps<
@@ -52,60 +55,28 @@ function formatDuration(seconds: number): string {
   return `${minutes}m`;
 }
 
-function TrendBars({ data }: { data: AgentDashboardTrendPoint[] }) {
-  const maxCalls = useMemo(() => Math.max(...data.map((item) => item.calls), 1), [data]);
-
+function isToday(value?: string | null): boolean {
+  if (!value) return false;
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return false;
+  const today = new Date();
   return (
-    <View style={styles.trendChartWrap}>
-      {data.map((item) => {
-        const day = item.date.slice(-2);
-        const callHeight = Math.max(6, Math.round((item.calls / maxCalls) * 80));
-        return (
-          <View key={item.date} style={styles.trendBarItem}>
-            <View style={[styles.trendBar, { height: callHeight }]} />
-            <Text style={styles.trendBarLabel}>{day}</Text>
-          </View>
-        );
-      })}
-    </View>
-  );
-}
-
-function FunnelRow({
-  label,
-  value,
-  max,
-  color,
-}: {
-  label: string;
-  value: number;
-  max: number;
-  color: string;
-}) {
-  const widthPercent = max > 0 ? Math.max(5, Math.round((value / max) * 100)) : 0;
-  return (
-    <View style={styles.funnelRow}>
-      <View style={styles.funnelHeader}>
-        <Text style={styles.funnelLabel}>{label}</Text>
-        <Text style={styles.funnelValue}>{value}</Text>
-      </View>
-      <View style={styles.funnelTrack}>
-        <View style={[styles.funnelFill, { width: `${widthPercent}%`, backgroundColor: color }]} />
-      </View>
-    </View>
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate()
   );
 }
 
 export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
+  const rootNavigation = useRootNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
-  const [summary, setSummary] = useState<AgentDashboardSummary | null>(null);
-  const [trends, setTrends] = useState<AgentDashboardTrendPoint[]>([]);
-  const [breakdown, setBreakdown] = useState<AgentFailureBreakdown | null>(null);
-  const [funnel, setFunnel] = useState<AgentConversionFunnel | null>(null);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [historySummary, setHistorySummary] = useState<CallHistorySummary | null>(null);
+  const [recentCalls, setRecentCalls] = useState<CallHistoryItem[]>([]);
+  const [statusSummary, setStatusSummary] = useState<AgentStatusSummaryItem[]>([]);
 
   const load = useCallback(
     async (showRefresh = false) => {
@@ -121,22 +92,20 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           return;
         }
 
-        const [me, summaryData, trendsData, failureData, funnelData] = await Promise.all([
+        const [me, campaignList, history, statusSum] = await Promise.all([
           getMe(token),
-          getAgentDashboardSummary(token),
-          getAgentDashboardTrends(token),
-          getAgentFailureBreakdown(token),
-          getAgentConversionFunnel(token),
+          getCampaigns(token).catch(() => [] as Campaign[]),
+          getCallHistory(token, { page: 1, limit: 25 }).catch(() => null),
+          getAgentStatusSummary(token).catch(() => [] as AgentStatusSummaryItem[]),
         ]);
 
         setAgent(me);
-        setSummary(summaryData);
-        setTrends(trendsData.last_7_days);
-        setBreakdown(failureData);
-        setFunnel(funnelData);
+        setCampaigns(campaignList);
+        setHistorySummary(history?.summary ?? null);
+        setRecentCalls(history?.calls ?? []);
+        setStatusSummary(statusSum);
       } catch (e) {
         if (e instanceof AuthError) {
-          await clearToken();
           onLoggedOut();
           navigation.replace("Login");
           return;
@@ -155,29 +124,34 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
   }, [load]);
 
   const handleLogout = async () => {
-    await clearToken();
+    await logout();
     onLoggedOut();
     navigation.replace("Login");
   };
 
-  const hour = new Date().getHours();
-  const greeting =
-    hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
-  const firstName = agent?.full_name?.split(" ")[0] || "Agent";
-  const initials = (agent?.full_name ?? "A")
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
+  const openContactChat = (contact: ChatContact) => {
+    rootNavigation.navigate("ChatDetail", {
+      contactId: contact.id,
+      contactName: contact.name,
+      contactPhone: contact.phone,
+      contactInitials: contact.initials,
+      contactOnline: contact.online,
+    });
+  };
 
-  const maxFunnelValue = Math.max(
-    funnel?.attempted ?? 0,
-    funnel?.connected ?? 0,
-    funnel?.qualified ?? 0,
-    funnel?.converted ?? 0,
-    funnel?.lost ?? 0,
-    1
+  const todaysCalls = useMemo(() => recentCalls.filter((c) => isToday(c.started_at)), [recentCalls]);
+  const completedToday = useMemo(
+    () => todaysCalls.filter((c) => c.status?.toLowerCase() === "completed").length,
+    [todaysCalls]
+  );
+  const talkTimeToday = useMemo(
+    () => todaysCalls.reduce((acc, c) => acc + (c.duration_seconds || 0), 0),
+    [todaysCalls]
+  );
+
+  const activeCampaignCount = useMemo(
+    () => campaigns.filter((c) => (c.status || "").toLowerCase() === "active").length,
+    [campaigns]
   );
 
   return (
@@ -188,63 +162,16 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           <RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.colors.primary} />
         }
       >
-        <View style={styles.header}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.greeting}>{greeting}</Text>
-            <Text style={styles.agentName}>{firstName}</Text>
-          </View>
-          <TouchableOpacity
-            activeOpacity={0.85}
-            onPress={() => setShowProfileMenu(true)}
-            style={styles.avatarBtn}
-          >
-            <Text style={styles.avatarInitials}>{initials}</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Profile dropdown */}
-        <Modal
-          visible={showProfileMenu}
-          transparent
-          animationType="fade"
-          onRequestClose={() => setShowProfileMenu(false)}
-        >
-          <Pressable style={styles.menuOverlay} onPress={() => setShowProfileMenu(false)}>
-            <View style={styles.menuCard}>
-              <View style={styles.menuHeader}>
-                <View style={styles.menuAvatar}>
-                  <Text style={styles.menuAvatarInitials}>{initials}</Text>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.menuName}>{agent?.full_name || "Agent"}</Text>
-                  <Text style={styles.menuEmail} numberOfLines={1}>{agent?.email || ""}</Text>
-                </View>
-              </View>
-              <View style={styles.menuDivider} />
-              <TouchableOpacity
-                style={styles.menuRow}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setShowProfileMenu(false);
-                  Alert.alert("Coming Soon", "Settings will be available soon.");
-                }}
-              >
-                <Text style={styles.menuRowText}>Settings</Text>
-              </TouchableOpacity>
-              <View style={styles.menuDivider} />
-              <TouchableOpacity
-                style={styles.menuRow}
-                activeOpacity={0.7}
-                onPress={() => {
-                  setShowProfileMenu(false);
-                  handleLogout();
-                }}
-              >
-                <Text style={[styles.menuRowText, styles.menuRowDestructive]}>Logout</Text>
-              </TouchableOpacity>
-            </View>
-          </Pressable>
-        </Modal>
+        <ScreenHeader
+          title="Home"
+          subtitle={agent?.display_name || agent?.full_name || agent?.email || "Agent"}
+          right={
+            <>
+              <BreakTimeButton onPress={() => navigation.navigate("AgentStatus")} compact />
+              <PrimaryButton label="Logout" onPress={handleLogout} variant="ghost" />
+            </>
+          }
+        />
 
         {loading ? (
           <View style={styles.center}>
@@ -259,106 +186,96 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
           </View>
         ) : (
           <>
-            <View style={styles.heroCard}>
-              <Text style={styles.heroTitle}>Operational pulse</Text>
-              <Text style={styles.heroMetric}>{summary?.total_calls ?? 0}</Text>
-              <Text style={styles.heroSub}>Total calls handled</Text>
+            <LinearGradient
+              colors={theme.colors.heroGradient}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <Text style={styles.heroTitle}>Today</Text>
+              <Text style={styles.heroMetric}>{todaysCalls.length}</Text>
+              <Text style={styles.heroSub}>Calls placed today</Text>
               <View style={styles.heroBadges}>
-                <View style={styles.badgeSuccess}>
-                  <Text style={styles.badgeSuccessText}>Connected {summary?.connected_calls ?? 0}</Text>
-                </View>
-                <View style={styles.badgeWarning}>
-                  <Text style={styles.badgeWarningText}>Fatal {summary?.fatal_calls ?? 0}</Text>
-                </View>
+                <BadgeChip label={`Completed ${completedToday}`} variant="success" />
+                <BadgeChip label={`Talk ${formatDuration(talkTimeToday)}`} variant="neutral" />
               </View>
-            </View>
+            </LinearGradient>
 
             <View style={styles.cardGrid}>
               <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Quality Score</Text>
-                <Text style={styles.metricValue}>{(summary?.quality_score_avg ?? 0).toFixed(1)}</Text>
+                <Text style={styles.metricLabel}>Assigned campaigns</Text>
+                <Text style={styles.metricValue}>{campaigns.length}</Text>
+                <Text style={styles.metricHint}>{activeCampaignCount} active</Text>
               </View>
               <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Conversion Rate</Text>
-                <Text style={styles.metricValue}>{(summary?.conversion_rate ?? 0).toFixed(1)}%</Text>
-              </View>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Talk Time</Text>
-                <Text style={styles.metricValue}>{formatDuration(summary?.talk_time_total ?? 0)}</Text>
-              </View>
-              <View style={styles.metricCard}>
-                <Text style={styles.metricLabel}>Follow-ups Due</Text>
-                <Text style={styles.metricValue}>{summary?.followups_due ?? 0}</Text>
-              </View>
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>7-day call trend</Text>
-              <TrendBars data={trends} />
-              <View style={styles.trendStats}>
-                <Text style={styles.trendStatText}>Connected: {summary?.connected_calls ?? 0}</Text>
-                <Text style={styles.trendStatText}>Conversions: {summary?.conversion_count ?? 0}</Text>
-                <Text style={styles.trendStatText}>Fatal: {summary?.fatal_calls ?? 0}</Text>
-              </View>
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Conversion funnel</Text>
-              <FunnelRow
-                label="Attempted"
-                value={funnel?.attempted ?? 0}
-                max={maxFunnelValue}
-                color={theme.colors.primary}
-              />
-              <FunnelRow
-                label="Connected"
-                value={funnel?.connected ?? 0}
-                max={maxFunnelValue}
-                color="#60A5FA"
-              />
-              <FunnelRow
-                label="Qualified"
-                value={funnel?.qualified ?? 0}
-                max={maxFunnelValue}
-                color={theme.colors.chartQualified}
-              />
-              <FunnelRow
-                label="Converted"
-                value={funnel?.converted ?? 0}
-                max={maxFunnelValue}
-                color={theme.colors.success}
-              />
-              <FunnelRow label="Lost" value={funnel?.lost ?? 0} max={maxFunnelValue} color={theme.colors.error} />
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Reason breakdown</Text>
-              {(breakdown?.fatal_reasons ?? []).slice(0, 4).map((item) => (
-                <View key={item.reason} style={styles.rowItem}>
-                  <Text style={styles.rowLabel}>{item.reason}</Text>
-                  <Text style={styles.rowValue}>{item.count}</Text>
-                </View>
-              ))}
-              {(!breakdown || breakdown.fatal_reasons.length === 0) && (
-                <Text style={styles.emptyText}>No fatal patterns captured yet.</Text>
-              )}
-            </View>
-
-            <View style={styles.card}>
-              <Text style={styles.cardTitle}>Coaching insights</Text>
-              {(breakdown?.coaching_insights ?? []).map((line) => (
-                <Text key={line} style={styles.insightText}>
-                  • {line}
+                <Text style={styles.metricLabel}>All-time calls</Text>
+                <Text style={styles.metricValue}>{historySummary?.total_calls ?? 0}</Text>
+                <Text style={styles.metricHint}>
+                  {historySummary?.completed_calls ?? 0} completed
                 </Text>
-              ))}
-              {(breakdown?.coaching_insights.length ?? 0) === 0 && (
-                <Text style={styles.emptyText}>Insights will appear after more calls are analyzed.</Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricLabel}>Total talk time</Text>
+                <Text style={styles.metricValue}>
+                  {formatDuration(historySummary?.total_duration_seconds ?? 0)}
+                </Text>
+              </View>
+              <View style={styles.metricCard}>
+                <Text style={styles.metricLabel}>Recent activity</Text>
+                <Text style={styles.metricValue}>{recentCalls.length}</Text>
+                <Text style={styles.metricHint}>last {recentCalls.length} calls</Text>
+              </View>
+            </View>
+
+            <HomeContactsSection
+              onOpenChat={openContactChat}
+              onViewAll={() => navigation.navigate("Chats")}
+            />
+
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Today's calls</Text>
+              {todaysCalls.length === 0 ? (
+                <Text style={styles.emptyText}>No calls placed yet today.</Text>
+              ) : (
+                todaysCalls.slice(0, 5).map((call) => (
+                  <TouchableOpacity
+                    key={call.id || call.call_id}
+                    style={styles.recentRow}
+                    activeOpacity={0.85}
+                    onPress={() => navigation.navigate("CallHistoryDetail", { callId: call.call_id })}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.recentName}>{call.customer_name || "Unknown"}</Text>
+                      <Text style={styles.recentMeta}>
+                        {call.phone_number || "-"} · {call.campaign_name || "Direct"}
+                      </Text>
+                    </View>
+                    <Text style={styles.recentStatus}>{call.status}</Text>
+                  </TouchableOpacity>
+                ))
               )}
             </View>
 
-            <TouchableOpacity style={styles.primaryAction} onPress={() => navigation.navigate("Leads", { screen: "CampaignList" })}>
-              <Text style={styles.primaryActionText}>Open Campaigns</Text>
-            </TouchableOpacity>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>Break time summary</Text>
+              {statusSummary.length === 0 ? (
+                <Text style={styles.emptyText}>No break time recorded yet.</Text>
+              ) : (
+                statusSummary.map((item) => (
+                  <View key={`${item.code}-${item.label}`} style={styles.rowItem}>
+                    <Text style={styles.rowLabel}>{item.label}</Text>
+                    <Text style={styles.rowValue}>{formatDuration(item.duration_seconds)}</Text>
+                  </View>
+                ))
+              )}
+            </View>
+
+            <PrimaryButton
+              label="Open campaigns"
+              onPress={() => navigation.navigate("Campaigns", { screen: "CampaignList" })}
+              size="lg"
+              style={styles.primaryAction}
+            />
           </>
         )}
       </ScrollView>
@@ -373,106 +290,17 @@ const styles = StyleSheet.create({
     paddingTop: theme.spacing.xl,
     paddingBottom: theme.spacing["3xl"],
   },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: theme.spacing.lg,
-  },
-  greeting: {
-    fontSize: theme.fontSize.base,
-    color: theme.colors.textSecondary,
-    fontWeight: "400",
-  },
-  agentName: {
-    fontSize: theme.fontSize.xl,
-    fontWeight: "700",
-    color: theme.colors.textPrimary,
-    marginTop: 2,
-  },
-  avatarBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarInitials: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: "700",
-    color: "#FFFFFF",
-    letterSpacing: 0.5,
-  },
-  menuOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.25)",
-    justifyContent: "flex-start",
-    alignItems: "flex-end",
-    paddingTop: 80,
-    paddingRight: theme.spacing.screen,
-  },
-  menuCard: {
-    backgroundColor: theme.colors.card,
-    borderRadius: theme.radius.lg,
-    minWidth: 220,
-    ...theme.shadow.card,
-    overflow: "hidden",
-  },
-  menuHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    padding: 16,
-  },
-  menuAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: theme.colors.primary,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  menuAvatarInitials: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#FFFFFF",
-  },
-  menuName: {
-    fontSize: theme.fontSize.base,
-    fontWeight: "600",
-    color: theme.colors.textPrimary,
-  },
-  menuEmail: {
-    fontSize: theme.fontSize.xs,
-    color: theme.colors.textSecondary,
-    marginTop: 1,
-  },
-  menuDivider: {
-    height: 1,
-    backgroundColor: theme.colors.border,
-  },
-  menuRow: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  menuRowText: {
-    fontSize: theme.fontSize.base,
-    fontWeight: "500",
-    color: theme.colors.textPrimary,
-  },
-  menuRowDestructive: {
-    color: theme.colors.error,
-  },
   center: { paddingVertical: theme.spacing["3xl"], alignItems: "center" },
   card: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginTop: theme.spacing.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   heroCard: {
-    backgroundColor: theme.colors.card,
     borderRadius: theme.radius.xl,
     padding: theme.spacing.card,
     marginTop: theme.spacing.sm,
@@ -480,45 +308,27 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
-    fontWeight: "500",
+    color: "rgba(255,255,255,0.85)",
+    fontWeight: theme.fontWeight.medium,
+    textTransform: "uppercase",
+    letterSpacing: theme.letterSpacing.wide,
   },
   heroMetric: {
     marginTop: theme.spacing.sm,
-    fontSize: theme.fontSize["2xl"],
-    fontWeight: "700",
-    color: theme.colors.textPrimary,
+    fontSize: 40,
+    fontWeight: theme.fontWeight.bold,
+    color: "#FFFFFF",
+    letterSpacing: theme.letterSpacing.tight,
   },
   heroSub: {
     fontSize: theme.fontSize.sm,
-    color: theme.colors.textSecondary,
+    color: "rgba(255,255,255,0.8)",
   },
   heroBadges: {
     flexDirection: "row",
     marginTop: theme.spacing.md,
     gap: theme.spacing.sm,
-  },
-  badgeSuccess: {
-    backgroundColor: "#ECFDF5",
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  badgeSuccessText: {
-    color: theme.colors.success,
-    fontWeight: "500",
-    fontSize: theme.fontSize.sm,
-  },
-  badgeWarning: {
-    backgroundColor: "#FEF2F2",
-    borderRadius: theme.radius.full,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.xs,
-  },
-  badgeWarningText: {
-    color: theme.colors.error,
-    fontWeight: "500",
-    fontSize: theme.fontSize.sm,
+    flexWrap: "wrap",
   },
   cardGrid: {
     marginTop: theme.spacing.md,
@@ -532,6 +342,8 @@ const styles = StyleSheet.create({
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.lg,
     padding: theme.spacing.lg,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     ...theme.shadow.card,
   },
   metricLabel: {
@@ -544,67 +356,40 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: theme.colors.textPrimary,
   },
+  metricHint: {
+    marginTop: 2,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.textTertiary,
+  },
   cardTitle: {
     fontSize: theme.fontSize.md,
     fontWeight: "600",
     color: theme.colors.textPrimary,
     marginBottom: theme.spacing.md,
   },
-  trendChartWrap: {
+  recentRow: {
+    paddingVertical: theme.spacing.sm,
     flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-end",
-    height: 110,
-  },
-  trendBarItem: {
-    width: "12%",
     alignItems: "center",
+    gap: theme.spacing.md,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
   },
-  trendBar: {
-    width: "70%",
-    borderRadius: theme.radius.base,
-    backgroundColor: theme.colors.primary,
-  },
-  trendBarLabel: {
-    marginTop: theme.spacing.xs,
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.xs,
-  },
-  trendStats: {
-    marginTop: theme.spacing.md,
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  trendStatText: {
-    fontSize: theme.fontSize.xs,
-    color: theme.colors.textSecondary,
-  },
-  funnelRow: {
-    marginBottom: theme.spacing.md,
-  },
-  funnelHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: theme.spacing.xs,
-  },
-  funnelLabel: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-  },
-  funnelValue: {
+  recentName: {
     color: theme.colors.textPrimary,
-    fontWeight: "500",
     fontSize: theme.fontSize.sm,
+    fontWeight: theme.fontWeight.semibold,
   },
-  funnelTrack: {
-    height: 8,
-    borderRadius: theme.radius.full,
-    backgroundColor: "#EEF2F7",
-    overflow: "hidden",
+  recentMeta: {
+    marginTop: 2,
+    color: theme.colors.textSecondary,
+    fontSize: theme.fontSize.xs,
   },
-  funnelFill: {
-    height: 8,
-    borderRadius: theme.radius.full,
+  recentStatus: {
+    color: theme.colors.primary,
+    fontSize: theme.fontSize.xs,
+    fontWeight: theme.fontWeight.semibold,
+    textTransform: "capitalize",
   },
   rowItem: {
     flexDirection: "row",
@@ -622,28 +407,12 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     fontSize: theme.fontSize.sm,
   },
-  insightText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
-    marginBottom: theme.spacing.sm,
-    lineHeight: 20,
-  },
   emptyText: {
     color: theme.colors.textTertiary,
     fontSize: theme.fontSize.sm,
   },
   primaryAction: {
     marginTop: theme.spacing.lg,
-    backgroundColor: theme.colors.primary,
-    borderRadius: theme.radius.full,
-    paddingVertical: theme.spacing.md,
-    alignItems: "center",
-    ...theme.shadow.button,
-  },
-  primaryActionText: {
-    color: theme.colors.card,
-    fontSize: theme.fontSize.base,
-    fontWeight: "600",
   },
   errorText: {
     color: theme.colors.error,

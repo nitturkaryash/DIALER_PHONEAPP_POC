@@ -20,7 +20,10 @@
     "android": {
       "package": "com.callpulse.dialer",
       "usesCleartextTraffic": true,
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
         "backgroundColor": "#F5F5F7"
       }
@@ -31,7 +34,14 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-font"
-    ]
+      "expo-font",
+      "react-native-audio-api"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "2b1e60d7-f6b2-495e-9703-190d4247e171"
+      }
+    },
+    "owner": "ankit841226"
   }
 }

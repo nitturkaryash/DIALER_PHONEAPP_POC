@@ -3,28 +3,47 @@ import * as SecureStore from "expo-secure-store";
 
 import type {
   Agent,
-  AgentConversionFunnel,
-  AgentDashboardSummary,
-  AgentDashboardTrends,
-  AgentFailureBreakdown,
+  AgentStatusClearResponse,
+  AgentStatusCodesResponse,
+  AgentStatusCurrentResponse,
+  AgentStatusSelectResponse,
+  AgentStatusSummaryResponse,
   Campaign,
-  CallSession,
+  CampaignContact,
+  CampaignDetailResponse,
+  CampaignListResponse,
+  CallHistoryDetailResponse,
+  CallHistoryResponse,
+  ConversationResponse,
+  DispositionCatalogItem,
+  DispositionListResponse,
   DispositionPayload,
   Lead,
-  HumanAgentCallRequest,
-  HumanAgentCallResponse,
-  HumanAgentCallStatus,
-  CallHistoryResponse,
-  CallHistoryDetailResponse,
+  LoginResponse,
   OutboundCallRequest,
   OutboundCallResponse,
   OutboundCallStatus,
 } from "../types";
-import { DEV_TOKEN, mockAgent, mockCallSession, mockCampaigns, mockLeads, mockDashboardSummary, mockDashboardTrends, mockFailureBreakdown, mockConversionFunnel, mockCallHistory } from "./mockData";
+import { contactToLead } from "../types";
+import {
+  DEV_TOKEN,
+  ENABLE_DEV_MOCKS,
+  mockAgent,
+  mockCallHistory,
+  mockCampaigns,
+  mockDispositions,
+  mockLeads,
+  mockOutboundCallResponse,
+  mockOutboundCallStatus,
+  mockPauseCodes,
+} from "./mockData";
 
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000";
+import { BASE_URL, COMMONS_URL } from "../config/network";
+
+export { BASE_URL, COMMONS_URL };
+
 export const TOKEN_KEY = "callpulse_access_token";
-const ENABLE_DEV_MOCKS = process.env.EXPO_PUBLIC_ENABLE_DEV_MOCKS === "true";
+export const REFRESH_TOKEN_KEY = "callpulse_refresh_token";
 
 export class AuthError extends Error {
   constructor(message = "Unauthorized") {
@@ -33,30 +52,55 @@ export class AuthError extends Error {
   }
 }
 
-export async function getToken(): Promise<string | null> {
+// ─── Token storage (SecureStore on native, localStorage on web) ─────────────
+
+async function readKey(key: string): Promise<string | null> {
+  if (Platform.OS === "web") return localStorage.getItem(key);
+  return SecureStore.getItemAsync(key);
+}
+
+async function writeKey(key: string, value: string): Promise<void> {
   if (Platform.OS === "web") {
-    return localStorage.getItem(TOKEN_KEY);
+    localStorage.setItem(key, value);
+    return;
   }
-  return SecureStore.getItemAsync(TOKEN_KEY);
+  await SecureStore.setItemAsync(key, value);
+}
+
+async function deleteKey(key: string): Promise<void> {
+  if (Platform.OS === "web") {
+    localStorage.removeItem(key);
+    return;
+  }
+  await SecureStore.deleteItemAsync(key);
+}
+
+export async function getToken(): Promise<string | null> {
+  return readKey(TOKEN_KEY);
 }
 
 export async function setToken(token: string): Promise<void> {
-  if (Platform.OS === "web") {
-    localStorage.setItem(TOKEN_KEY, token);
-    return;
-  }
-  await SecureStore.setItemAsync(TOKEN_KEY, token);
+  await writeKey(TOKEN_KEY, token);
+}
+
+export async function getRefreshToken(): Promise<string | null> {
+  return readKey(REFRESH_TOKEN_KEY);
+}
+
+export async function setRefreshToken(token: string): Promise<void> {
+  await writeKey(REFRESH_TOKEN_KEY, token);
 }
 
 export async function clearToken(): Promise<void> {
-  if (Platform.OS === "web") {
-    localStorage.removeItem(TOKEN_KEY);
-    return;
-  }
-  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await deleteKey(TOKEN_KEY);
+  await deleteKey(REFRESH_TOKEN_KEY);
 }
 
-async function request<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
+// ─── Generic request helper ─────────────────────────────────────────────────
+
+type RequestOptions = RequestInit & { baseUrl?: string };
+
+async function request<T>(path: string, options: RequestOptions = {}, token?: string): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(options.headers as Record<string, string> | undefined),
@@ -66,7 +110,10 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
     headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${BASE_URL}${path}`, { ...options, headers });
+  const baseUrl = options.baseUrl ?? BASE_URL;
+  const { baseUrl: _ignored, ...fetchOptions } = options;
+  const response = await fetch(`${baseUrl}${path}`, { ...fetchOptions, headers });
+
   if (response.status === 401) {
     await clearToken();
     throw new AuthError("Session expired");
@@ -75,196 +122,244 @@ async function request<T>(path: string, options: RequestInit = {}, token?: strin
   if (!response.ok) {
     const text = await response.text();
     try {
-      const json = JSON.parse(text) as { detail?: string | { msg?: string }[]; message?: string };
-      if (typeof json.detail === "string") {
-        throw new Error(json.detail);
-      }
-      if (Array.isArray(json.detail) && json.detail[0]?.msg) {
-        throw new Error(json.detail[0].msg);
-      }
-      if (json.message) {
-        throw new Error(json.message);
-      }
+      const json = JSON.parse(text) as { detail?: string | { msg?: string }[]; message?: string; error?: { message?: string } };
+      if (typeof json.detail === "string") throw new Error(json.detail);
+      if (Array.isArray(json.detail) && json.detail[0]?.msg) throw new Error(json.detail[0].msg);
+      if (json.message) throw new Error(json.message);
+      if (json.error?.message) throw new Error(json.error.message);
     } catch (e) {
-      if (e instanceof Error && e.message !== text) {
-        throw e;
-      }
+      if (e instanceof Error && e.message !== text) throw e;
     }
-    throw new Error(text || "Request failed");
+    throw new Error(text || `Request failed (${response.status})`);
   }
 
-  if (response.status === 204) {
-    return {} as T;
-  }
-
+  if (response.status === 204) return {} as T;
   return (await response.json()) as T;
 }
 
-export async function login(email: string, password: string): Promise<{ access_token: string; token_type: string }> {
-  return request("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
+// ─── Auth (Qualia-Commons-Backend) ──────────────────────────────────────────
+
+/** Sign in via Qualia Commons. Returns {access_token, refresh_token, user}. */
+export async function login(email: string, password: string): Promise<LoginResponse["data"]> {
+  const response = await request<LoginResponse>(
+    "/auth/login",
+    {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+      baseUrl: COMMONS_URL,
+    }
+  );
+  return response.data;
 }
 
+/** Refresh an expired access token via Commons. */
+export async function refresh(refreshToken: string): Promise<LoginResponse["data"]> {
+  const response = await request<LoginResponse>(
+    "/auth/refresh",
+    {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: refreshToken }),
+      baseUrl: COMMONS_URL,
+    }
+  );
+  return response.data;
+}
+
+/** Sign out: revoke the refresh token on Commons (best-effort). */
+export async function logout(): Promise<void> {
+  const refreshToken = await getRefreshToken();
+  if (refreshToken) {
+    try {
+      await request(
+        "/auth/logout",
+        {
+          method: "POST",
+          body: JSON.stringify({ refresh_token: refreshToken }),
+          baseUrl: COMMONS_URL,
+        }
+      );
+    } catch {
+      // best-effort: server may already have rotated the token
+    }
+  }
+  await clearToken();
+}
+
+/** Get the current authenticated user (uses Voice backend's /api/auth/me, which decodes the Commons JWT). */
 export async function getMe(token: string): Promise<Agent> {
   if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockAgent;
   const response = await request<{ ok: boolean; user: Agent }>("/api/auth/me", { method: "GET" }, token);
   return response.user;
 }
 
-export async function getCampaigns(token: string): Promise<Campaign[]> {
+// ─── Campaigns ──────────────────────────────────────────────────────────────
+
+export async function getCampaigns(token: string, page = 1, limit = 50): Promise<Campaign[]> {
   if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockCampaigns;
-  return request("/v1/dialer/campaigns", { method: "GET" }, token);
-}
-
-export async function getLeads(token: string, processId: string, status = "pending"): Promise<Lead[]> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockLeads.filter((l) => status === "pending" ? l.status === "pending" : true);
-  const query = new URLSearchParams({ status });
-  return request(`/v1/dialer/campaigns/${processId}/leads?${query.toString()}`, { method: "GET" }, token);
-}
-
-export async function startCall(token: string, leadId: string, processId: string): Promise<CallSession> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockCallSession(leadId);
-  return request(
-    "/v1/dialer/calls",
-    {
-      method: "POST",
-      body: JSON.stringify({ lead_id: leadId, process_id: processId }),
-    },
+  const response = await request<CampaignListResponse>(
+    `/api/campaigns?page=${page}&limit=${limit}`,
+    { method: "GET" },
     token
   );
+  return response.campaigns || [];
 }
 
-export async function updateCallStatus(token: string, callId: string, status: "answered" | "ended"): Promise<{ success: boolean }> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return { success: true };
-  return request(
-    `/v1/dialer/calls/${callId}/status`,
-    {
-      method: "PATCH",
-      body: JSON.stringify({ status }),
-    },
-    token
-  );
-}
-
-export async function saveDisposition(
+export async function getCampaignDetail(
   token: string,
-  callId: string,
-  data: DispositionPayload
-): Promise<{ success: boolean; next_lead_id?: string }> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return { success: true };
+  campaignId: string,
+  page = 1,
+  limit = 500
+): Promise<CampaignDetailResponse> {
   return request(
-    `/v1/dialer/calls/${callId}/disposition`,
-    {
-      method: "POST",
-      body: JSON.stringify(data),
-    },
-    token
-  );
-}
-
-export async function getAgentDashboardSummary(token: string): Promise<AgentDashboardSummary> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockDashboardSummary;
-  const response = await request<{ ok: boolean; summary: AgentDashboardSummary }>(
-    "/v1/dashboard/agent/summary",
+    `/api/campaigns/${encodeURIComponent(campaignId)}?page=${page}&limit=${limit}`,
     { method: "GET" },
     token
   );
-  return response.summary;
 }
 
-export async function getAgentDashboardTrends(token: string): Promise<AgentDashboardTrends> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockDashboardTrends;
-  const response = await request<{ ok: boolean; trends: AgentDashboardTrends }>(
-    "/v1/dashboard/agent/trends",
-    { method: "GET" },
-    token
-  );
-  return response.trends;
+/** Fetch leads for a campaign (mapped from CampaignContact). Optional status filter (case-insensitive). */
+export async function getLeads(token: string, campaignId: string, status = "pending"): Promise<Lead[]> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) {
+    if (!status || status === "all") return mockLeads;
+    return mockLeads.filter((l) => l.status.toLowerCase() === status.toLowerCase());
+  }
+  const detail = await getCampaignDetail(token, campaignId, 1, 500);
+  const leads = (detail.contacts || []).map(contactToLead);
+  if (!status || status === "all") return leads;
+  return leads.filter((l) => l.status === status.toLowerCase());
 }
 
-export async function getAgentFailureBreakdown(token: string): Promise<AgentFailureBreakdown> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockFailureBreakdown;
-  const response = await request<{ ok: boolean; breakdown: AgentFailureBreakdown }>(
-    "/v1/dashboard/agent/failure-breakdown",
-    { method: "GET" },
-    token
-  );
-  return response.breakdown;
-}
+// ─── Outbound calls ─────────────────────────────────────────────────────────
 
-export async function getAgentConversionFunnel(token: string): Promise<AgentConversionFunnel> {
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockConversionFunnel;
-  const response = await request<{ ok: boolean; funnel: AgentConversionFunnel }>(
-    "/v1/dashboard/agent/conversion-funnel",
-    { method: "GET" },
-    token
-  );
-  return response.funnel;
-}
-
+/** Start an outbound call. handler="human" = agent talks (WebSocket bridge); handler="ai" = bot talks. */
 export async function initiateOutboundCall(
   token: string,
   payload: OutboundCallRequest
 ): Promise<OutboundCallResponse> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockOutboundCallResponse(payload);
   return request(
     "/api/calls/outbound",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
+    { method: "POST", body: JSON.stringify(payload) },
     token
   );
 }
 
 export async function getOutboundCallStatus(token: string, callId: string): Promise<OutboundCallStatus> {
-  return request(`/api/calls/${callId}/status`, { method: "GET" }, token);
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockOutboundCallStatus(callId);
+  return request(`/api/calls/${encodeURIComponent(callId)}/status`, { method: "GET" }, token);
 }
 
-export async function createHumanAgentCall(
-  token: string,
-  payload: HumanAgentCallRequest
-): Promise<HumanAgentCallResponse> {
-  return request(
-    "/v1/agent-calls",
-    {
-      method: "POST",
-      body: JSON.stringify(payload),
-    },
+export async function hangupCall(token: string, callId: string): Promise<{ ok: boolean; success: boolean }> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return { ok: true, success: true };
+  return request(`/api/calls/${encodeURIComponent(callId)}/hangup`, { method: "POST" }, token);
+}
+
+/** Build the WebSocket URL for the agent's audio bridge on a given call. JWT goes in the query string. */
+export function buildAgentAudioWsUrl(callId: string, token: string): string {
+  const wsBase = BASE_URL.replace(/^http/i, "ws");
+  return `${wsBase}/api/calls/${encodeURIComponent(callId)}/agent-audio?token=${encodeURIComponent(token)}&client=mobile`;
+}
+
+// ─── Dispositions ───────────────────────────────────────────────────────────
+
+export async function getDispositionCatalog(token: string): Promise<DispositionCatalogItem[]> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockDispositions;
+  const response = await request<DispositionListResponse>(
+    "/api/disposition?skip=0&limit=200",
+    { method: "GET" },
     token
   );
+  return response.dispositions || [];
 }
 
-export async function getHumanAgentCallStatus(
-  token: string,
-  callId: string
-): Promise<HumanAgentCallStatus> {
-  return request(`/v1/agent-calls/${callId}/status`, { method: "GET" }, token);
-}
-
-export async function hangupHumanAgentCall(token: string, callId: string): Promise<{ success: boolean }> {
-  return request(`/v1/agent-calls/${callId}/hangup`, { method: "POST" }, token);
-}
-
-export async function saveHumanAgentDisposition(
+/** Save the disposition + notes for a finished call. */
+export async function saveCallDisposition(
   token: string,
   callId: string,
-  data: DispositionPayload
-): Promise<{ success: boolean }> {
+  payload: DispositionPayload
+): Promise<void> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return;
+  await request(
+    `/api/calls/history/${encodeURIComponent(callId)}/disposition`,
+    { method: "PUT", body: JSON.stringify(payload) },
+    token
+  );
+}
+
+// ─── Agent status (pause codes) ─────────────────────────────────────────────
+
+export async function getAgentStatusCodes(token: string): Promise<AgentStatusCodesResponse["codes"]> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockPauseCodes;
+  const response = await request<AgentStatusCodesResponse>(
+    "/api/agent-status/codes?skip=0&limit=100",
+    { method: "GET" },
+    token
+  );
+  return response.codes || [];
+}
+
+export async function getCurrentAgentStatus(
+  token: string,
+  agentId?: string
+): Promise<AgentStatusCurrentResponse["current"]> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return null;
+  const suffix = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  const response = await request<AgentStatusCurrentResponse>(
+    `/api/agent-status/current${suffix}`,
+    { method: "GET" },
+    token
+  );
+  return response.current;
+}
+
+export async function selectAgentStatus(
+  token: string,
+  agentStatusId: string,
+  agentId?: string
+): Promise<AgentStatusSelectResponse> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) {
+    return { ok: true, tracking_id: `mock-${Date.now()}`, started_at: new Date().toISOString() };
+  }
   return request(
-    `/v1/agent-calls/${callId}/disposition`,
+    "/api/agent-status/select",
     {
       method: "POST",
-      body: JSON.stringify(data),
+      body: JSON.stringify({ agent_status_id: agentStatusId, agent_id: agentId }),
     },
     token
   );
 }
 
-export async function notifyHumanAgentJoined(token: string, callId: string): Promise<void> {
-  await request(`/v1/agent-calls/${callId}/agent-joined`, { method: "POST" }, token);
+export async function clearAgentStatus(
+  token: string,
+  agentId?: string
+): Promise<AgentStatusClearResponse> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return { ok: true, closed: true };
+  return request(
+    "/api/agent-status/clear",
+    {
+      method: "POST",
+      body: JSON.stringify({ agent_id: agentId }),
+    },
+    token
+  );
 }
+
+export async function getAgentStatusSummary(
+  token: string,
+  agentId?: string
+): Promise<AgentStatusSummaryResponse["summary"]> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return [];
+  const suffix = agentId ? `?agent_id=${encodeURIComponent(agentId)}` : "";
+  const response = await request<AgentStatusSummaryResponse>(
+    `/api/agent-status/summary${suffix}`,
+    { method: "GET" },
+    token
+  );
+  return response.summary || [];
+}
+
+// ─── Call history & conversation ────────────────────────────────────────────
 
 export async function getCallHistory(
   token: string,
@@ -276,8 +371,10 @@ export async function getCallHistory(
     campaign_id?: string;
     date_from?: string;
     date_to?: string;
+    disposition_id?: string;
   } = {}
 ): Promise<CallHistoryResponse> {
+  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockCallHistory;
   const query = new URLSearchParams();
   if (params.page) query.set("page", String(params.page));
   if (params.limit) query.set("limit", String(params.limit));
@@ -286,8 +383,7 @@ export async function getCallHistory(
   if (params.campaign_id) query.set("campaign_id", params.campaign_id);
   if (params.date_from) query.set("date_from", params.date_from);
   if (params.date_to) query.set("date_to", params.date_to);
-
-  if (ENABLE_DEV_MOCKS && token === DEV_TOKEN) return mockCallHistory;
+  if (params.disposition_id) query.set("disposition_id", params.disposition_id);
   const suffix = query.toString() ? `?${query.toString()}` : "";
   return request(`/api/calls/history${suffix}`, { method: "GET" }, token);
 }
@@ -297,4 +393,8 @@ export async function getCallHistoryDetail(
   callId: string
 ): Promise<CallHistoryDetailResponse> {
   return request(`/api/calls/history/${encodeURIComponent(callId)}`, { method: "GET" }, token);
+}
+
+export async function getConversation(token: string, callId: string): Promise<ConversationResponse> {
+  return request(`/api/conversations/${encodeURIComponent(callId)}`, { method: "GET" }, token);
 }

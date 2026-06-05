@@ -3,23 +3,24 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
-import { Ionicons } from "@expo/vector-icons";
+import { Feather } from "@expo/vector-icons";
 
 import { theme } from "../theme";
 
+type FeatherIconName = React.ComponentProps<typeof Feather>["name"];
+
 type TabConfig = {
   label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-  short?: string;
+  icon: FeatherIconName;
   emphasize?: boolean;
 };
 
 const TAB_CONFIG: Record<string, TabConfig> = {
-  Home:  { label: "Home",  icon: "home-outline",                emphasize: false },
-  Leads: { label: "Leads", icon: "people-outline",              emphasize: false },
-  Dial:  { label: "Dial",  icon: "keypad",                      emphasize: true  },
-  Inbox: { label: "Inbox", icon: "chatbubbles-outline",         emphasize: false },
-  More:  { label: "More",  icon: "ellipsis-horizontal-outline", emphasize: false },
+  Dashboard: { label: "Home", icon: "home" },
+  Dial: { label: "Dial", icon: "phone", emphasize: true },
+  Chats: { label: "Chats", icon: "message-circle" },
+  CallHistory: { label: "History", icon: "clock" },
+  Campaigns: { label: "Campaigns", icon: "target" },
 };
 
 const INACTIVE_COLOR = "#999";
@@ -29,72 +30,84 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
   const bottomInset = Math.max(insets.bottom, theme.spacing.sm);
 
   return (
-    <View style={[styles.wrap, { paddingBottom: bottomInset }]}>
-      {state.routes.map((route, index) => {
-        const focused = state.index === index;
-        const config = TAB_CONFIG[route.name] ?? { label: route.name, icon: "ellipsis-horizontal-outline" as const };
-        const { options } = descriptors[route.key];
-        const color = focused ? theme.colors.primary : INACTIVE_COLOR;
+    <View style={[styles.outer, { paddingBottom: bottomInset }]}>
+      <View style={styles.wrap}>
+        {state.routes.map((route, index) => {
+          const focused = state.index === index;
+          const config = TAB_CONFIG[route.name] ?? { label: route.name, icon: "circle" as FeatherIconName };
+          const { options } = descriptors[route.key];
 
-        const onPress = () => {
-          if (Platform.OS !== "web") {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-          }
-          const event = navigation.emit({
-            type: "tabPress",
-            target: route.key,
-            canPreventDefault: true,
-          });
-          if (!focused && !event.defaultPrevented) {
-            navigation.navigate(route.name);
-            return;
-          }
-          if (focused && route.name === "Leads") {
-            navigation.navigate("Leads", { screen: "CampaignList" });
-          }
-        };
+          const onPress = () => {
+            if (Platform.OS !== "web") {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+            }
+            const event = navigation.emit({
+              type: "tabPress",
+              target: route.key,
+              canPreventDefault: true,
+            });
+            if (!focused && !event.defaultPrevented) {
+              navigation.navigate(route.name);
+              return;
+            }
+            if (focused && route.name === "Campaigns") {
+              navigation.navigate("Campaigns", { screen: "CampaignList" });
+            }
+          };
 
-        return (
-          <Pressable
-            key={route.key}
-            accessibilityRole="button"
-            accessibilityState={focused ? { selected: true } : {}}
-            accessibilityLabel={options.tabBarAccessibilityLabel}
-            onPress={onPress}
-            style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
-          >
-            {config.emphasize ? (
-              <View style={styles.dialButton}>
-                <Ionicons name="keypad" size={26} color="#FFFFFF" />
+          const iconColor = focused
+            ? config.emphasize
+              ? "#fff"
+              : theme.colors.primary
+            : theme.colors.textTertiary;
+
+          return (
+            <Pressable
+              key={route.key}
+              accessibilityRole="button"
+              accessibilityState={focused ? { selected: true } : {}}
+              accessibilityLabel={options.tabBarAccessibilityLabel}
+              onPress={onPress}
+              style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
+            >
+              <View
+                style={[
+                  styles.iconWrap,
+                  config.emphasize && styles.iconWrapEmphasized,
+                  focused && !config.emphasize && styles.iconWrapActive,
+                  focused && config.emphasize && styles.iconWrapEmphasizedActive,
+                ]}
+              >
+                <Feather name={config.icon} size={config.emphasize ? 22 : 20} color={iconColor} />
               </View>
-            ) : (
-              <>
-                <Ionicons name={config.icon} size={22} color={color} />
-                <Text
-                  style={[styles.label, { color, fontWeight: focused ? "600" : "400" }]}
-                  numberOfLines={1}
-                >
-                  {config.label}
-                </Text>
-              </>
-            )}
-          </Pressable>
-        );
-      })}
+              <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
+                {config.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  outer: {
+    paddingHorizontal: theme.spacing.md,
+    paddingTop: theme.spacing.sm,
+    backgroundColor: "transparent",
+  },
   wrap: {
     flexDirection: "row",
     alignItems: "flex-start",
     minHeight: 72,
     backgroundColor: theme.colors.card,
-    borderTopWidth: 1,
-    borderTopColor: theme.colors.border,
+    borderRadius: theme.radius["2xl"],
+    borderWidth: 1,
+    borderColor: theme.colors.border,
     paddingTop: theme.spacing.sm,
-    paddingHorizontal: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.xs,
+    ...theme.shadow.tabBar,
   },
   tab: {
     flex: 1,
@@ -106,23 +119,37 @@ const styles = StyleSheet.create({
   tabPressed: {
     opacity: 0.85,
   },
-  label: {
-    fontSize: 11,
-    marginTop: 3,
-  },
-  dialButton: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    backgroundColor: theme.colors.primary,
+  iconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: theme.radius.md,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: -28,
-    marginBottom: 16,
-    shadowColor: theme.colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 8,
+  },
+  iconWrapEmphasized: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginTop: -14,
+    backgroundColor: theme.colors.surfaceMuted,
+    borderWidth: 3,
+    borderColor: theme.colors.card,
+  },
+  iconWrapEmphasizedActive: {
+    backgroundColor: theme.colors.primary,
+    ...theme.shadow.button,
+  },
+  iconWrapActive: {
+    backgroundColor: theme.colors.primarySoft,
+  },
+  label: {
+    marginTop: 2,
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.textTertiary,
+    fontWeight: theme.fontWeight.medium,
+  },
+  labelActive: {
+    color: theme.colors.primary,
+    fontWeight: theme.fontWeight.semibold,
   },
 });

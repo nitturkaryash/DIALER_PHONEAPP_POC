@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -14,68 +14,115 @@ import { LinearGradient } from "expo-linear-gradient";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
-import { AuthError, clearToken, getToken, saveDisposition, saveHumanAgentDisposition } from "../services/api";
+import {
+  AuthError,
+  getDispositionCatalog,
+  getToken,
+  saveCallDisposition,
+} from "../services/api";
 import { theme } from "../theme";
-import type { Disposition } from "../types";
+import type { DispositionCatalogItem } from "../types";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Disposition">;
 
-const outcomes: Disposition[] = ["Connected", "No Answer", "Busy", "Call Later", "Invalid"];
-
 export default function DispositionScreen({ route, navigation }: Props) {
-  const { callId, lead, returnTo, processId, processName, callMode } = route.params;
-  const [outcome, setOutcome] = useState<Disposition>("Connected");
+  const { callId, lead, returnTo, processId, processName } = route.params;
+  const [catalog, setCatalog] = useState<DispositionCatalogItem[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  const onSave = async () => {
+  const loadCatalog = useCallback(async () => {
     try {
-      setLoading(true);
+      setLoadingCatalog(true);
+      const token = await getToken();
+      if (!token) {
+        navigation.replace("Login");
+        return;
+      }
+      const items = await getDispositionCatalog(token);
+      const active = items.filter((d) => d.active !== false);
+      setCatalog(active);
+      if (active.length > 0 && !selectedId) {
+        setSelectedId(active[0].id);
+      }
+    } catch (e) {
+      if (e instanceof AuthError) {
+        navigation.replace("Login");
+        return;
+      }
+      setError(e instanceof Error ? e.message : "Unable to load dispositions");
+    } finally {
+      setLoadingCatalog(false);
+    }
+  }, [navigation, selectedId]);
+
+  useEffect(() => {
+    loadCatalog();
+  }, [loadCatalog]);
+
+  const navigateAfterSave = () => {
+    if (returnTo === "dial") {
+      navigation.reset({
+        index: 0,
+        routes: [{ name: "MainTabs", params: { screen: "Dial" } }],
+      });
+    } else {
+      navigation.reset({
+        index: 0,
+        routes: [
+          {
+            name: "MainTabs",
+            params: {
+              screen: "Campaigns",
+              params: {
+                screen: "Leads",
+                params: { processId: processId ?? "", processName: processName ?? "" },
+              },
+            },
+          },
+        ],
+      });
+    }
+  };
+
+  const onSave = async () => {
+    if (!callId) {
+      setError("No active call to save disposition for");
+      return;
+    }
+    if (!selectedId) {
+      setError("Pick an outcome");
+      return;
+    }
+    try {
+      setSaving(true);
       setError("");
       const token = await getToken();
       if (!token) {
         navigation.replace("Login");
         return;
       }
-      const payload = { outcome, notes: notes.trim() || undefined };
-      if (callMode === "human") {
-        await saveHumanAgentDisposition(token, callId, payload);
-      } else {
-        await saveDisposition(token, callId, payload);
-      }
-      if (returnTo === "dial") {
-        navigation.reset({
-          index: 0,
-          routes: [{ name: "MainTabs", params: { screen: "Dial" } }],
-        });
-      } else {
-        navigation.reset({
-          index: 0,
-          routes: [
-            {
-              name: "MainTabs",
-              params: {
-                screen: "CampaignList",
-                params: {
-                  screen: "Leads",
-                  params: { processId: processId ?? "", processName: processName ?? "" },
-                },
-              },
-            },
-          ],
-        });
-      }
+      await saveCallDisposition(token, callId, {
+        disposition_id: selectedId,
+        notes: notes.trim() || null,
+      });
+      navigateAfterSave();
     } catch (e) {
       if (e instanceof AuthError) {
-        await clearToken();
         navigation.replace("Login");
         return;
       }
       setError(e instanceof Error ? e.message : "Unable to save disposition");
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
+  };
+
+  const onSkip = () => {
+    navigateAfterSave();
   };
 
   return (
@@ -94,11 +141,9 @@ export default function DispositionScreen({ route, navigation }: Props) {
           contentContainerStyle={styles.content}
           keyboardShouldPersistTaps="handled"
         >
-          {/* Header */}
           <Text style={styles.title}>Call Summary</Text>
           <Text style={styles.subtitle}>Set outcome for this lead</Text>
 
-          {/* Contact card */}
           <View style={styles.contactCard}>
             <View style={styles.contactInitials}>
               <Text style={styles.contactInitialsText}>
@@ -116,32 +161,38 @@ export default function DispositionScreen({ route, navigation }: Props) {
             </View>
           </View>
 
-          {/* Outcome pills */}
           <Text style={styles.sectionLabel}>Outcome</Text>
-          <View style={styles.pillsWrap}>
-            {outcomes.map((item) => {
-              const selected = item === outcome;
-              return (
-                <TouchableOpacity
-                  key={item}
-                  activeOpacity={0.85}
-                  onPress={() => setOutcome(item)}
-                  style={[styles.pill, selected ? styles.pillSelected : styles.pillUnselected]}
-                >
-                  <Text
-                    style={[
-                      styles.pillText,
-                      selected ? styles.pillTextSelected : styles.pillTextUnselected,
-                    ]}
+          {loadingCatalog ? (
+            <ActivityIndicator color={theme.colors.primary} style={{ marginVertical: theme.spacing.lg }} />
+          ) : catalog.length === 0 ? (
+            <Text style={styles.empty}>
+              No dispositions configured. Skip to continue.
+            </Text>
+          ) : (
+            <View style={styles.pillsWrap}>
+              {catalog.map((item) => {
+                const selected = item.id === selectedId;
+                return (
+                  <TouchableOpacity
+                    key={item.id}
+                    activeOpacity={0.85}
+                    onPress={() => setSelectedId(item.id)}
+                    style={[styles.pill, selected ? styles.pillSelected : styles.pillUnselected]}
                   >
-                    {item}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
+                    <Text
+                      style={[
+                        styles.pillText,
+                        selected ? styles.pillTextSelected : styles.pillTextUnselected,
+                      ]}
+                    >
+                      {item.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
 
-          {/* Notes */}
           <Text style={styles.sectionLabel}>Notes</Text>
           <TextInput
             style={styles.notes}
@@ -156,21 +207,26 @@ export default function DispositionScreen({ route, navigation }: Props) {
 
           {!!error && <Text style={styles.error}>{error}</Text>}
 
-          {/* Save button */}
-          <TouchableOpacity activeOpacity={0.85} onPress={onSave} disabled={loading}>
-            <LinearGradient
-              colors={theme.colors.primaryGradient}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.saveBtn}
-            >
-              {loading ? (
-                <ActivityIndicator color={theme.colors.card} />
-              ) : (
-                <Text style={styles.saveText}>{returnTo === "dial" ? "Save & Done" : "Save & Next Lead"}</Text>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+          {catalog.length === 0 ? (
+            <TouchableOpacity activeOpacity={0.85} onPress={onSkip} style={styles.skipBtn}>
+              <Text style={styles.skipText}>Skip & continue</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity activeOpacity={0.85} onPress={onSave} disabled={saving}>
+              <LinearGradient
+                colors={theme.colors.primaryGradient}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.saveBtn}
+              >
+                {saving ? (
+                  <ActivityIndicator color={theme.colors.card} />
+                ) : (
+                  <Text style={styles.saveText}>{returnTo === "dial" ? "Save & Done" : "Save & Next Lead"}</Text>
+                )}
+              </LinearGradient>
+            </TouchableOpacity>
+          )}
         </ScrollView>
       </KeyboardAvoidingView>
     </LinearGradient>
@@ -196,7 +252,6 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.xs,
     marginBottom: theme.spacing.xl,
   },
-  // contact card with xl radius (24px)
   contactCard: {
     backgroundColor: theme.colors.card,
     borderRadius: theme.radius.xl,
@@ -247,11 +302,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
-  // accent on selected, muted on unselected (consistent with profile accent rule)
-  pillSelected: { backgroundColor: theme.colors.accent },
+  pillSelected: { backgroundColor: theme.colors.primary },
   pillUnselected: { backgroundColor: theme.colors.muted },
   pillText: { fontSize: theme.fontSize.sm, fontWeight: theme.fontWeight.medium },
-  pillTextSelected: { color: theme.colors.textPrimary },
+  pillTextSelected: { color: theme.colors.card },
   pillTextUnselected: { color: theme.colors.textSecondary },
   notes: {
     minHeight: 120,
@@ -262,6 +316,11 @@ const styles = StyleSheet.create({
     padding: theme.spacing.md,
     color: theme.colors.textPrimary,
     fontSize: theme.fontSize.base,
+    marginBottom: theme.spacing.xl,
+  },
+  empty: {
+    color: theme.colors.textTertiary,
+    fontSize: theme.fontSize.sm,
     marginBottom: theme.spacing.xl,
   },
   error: {
@@ -279,6 +338,17 @@ const styles = StyleSheet.create({
   saveText: {
     color: theme.colors.card,
     fontSize: theme.fontSize.base,
+    fontWeight: theme.fontWeight.semibold,
+  },
+  skipBtn: {
+    borderRadius: theme.radius.full,
+    height: 48,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: theme.colors.muted,
+  },
+  skipText: {
+    color: theme.colors.textPrimary,
     fontWeight: theme.fontWeight.semibold,
   },
 });
