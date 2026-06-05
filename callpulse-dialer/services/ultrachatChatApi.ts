@@ -23,11 +23,10 @@ export function formatPhoneDisplay(phone: string): string {
   return n.startsWith("+") ? n : `+${n}`;
 }
 
-async function authHeaders(): Promise<Record<string, string>> {
-  const token = await getUltraChatToken();
+function authHeaders(): Record<string, string> {
   return {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${token}`,
+    Authorization: `Bearer ${getUltraChatToken()}`,
   };
 }
 
@@ -116,7 +115,7 @@ export async function fetchUltraChatContacts(
   if (search?.trim()) params.set("search", search.trim());
 
   const res = await fetch(ultraChatApiUrl(`/api/chats/contacts?${params}`), {
-    headers: await authHeaders(),
+    headers: authHeaders(),
   });
   const json = (await res.json()) as { status?: string; message?: string; data?: { contacts?: unknown[] } };
   if (!res.ok || json.status !== "success") {
@@ -131,7 +130,7 @@ export async function fetchUltraChatHistory(phoneNumber: string, limit = 50): Pr
   const params = new URLSearchParams({ limit: String(limit), status: CHAT_STATUSES });
   const res = await fetch(
     ultraChatApiUrl(`/api/chats/${encodeURIComponent(phone)}?${params}`),
-    { headers: await authHeaders() }
+    { headers: authHeaders() }
   );
   const json = (await res.json()) as {
     status?: string;
@@ -149,7 +148,7 @@ export async function markUltraChatRead(phoneNumber: string): Promise<void> {
   const phone = normalizeWhatsAppPhone(phoneNumber);
   await fetch(ultraChatApiUrl(`/api/chats/${encodeURIComponent(phone)}/read`), {
     method: "POST",
-    headers: await authHeaders(),
+    headers: authHeaders(),
     body: JSON.stringify({}),
   });
 }
@@ -158,7 +157,7 @@ export async function sendUltraChatText(phoneNumber: string, textMessage: string
   const phone = normalizeWhatsAppPhone(phoneNumber);
   const res = await fetch(ultraChatApiUrl("/api/send/message"), {
     method: "POST",
-    headers: await authHeaders(),
+    headers: authHeaders(),
     body: JSON.stringify({ phone_number: phone, textMessage }),
   });
   const json = (await res.json()) as { status?: string; message?: string };
@@ -265,9 +264,9 @@ function subscribeUltraChatStreamXhr(handlers: StreamHandlers): { close: () => v
     retryMs = Math.min(retryMs * 2, 30_000);
   };
 
-  const connect = async () => {
+  const connect = () => {
     if (closed) return;
-    const token = await getUltraChatToken();
+    const token = getUltraChatToken();
     const url = ultraChatApiUrl(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
     const parser = createSseParser(handlers);
     let lastIndex = 0;
@@ -342,7 +341,7 @@ function subscribeUltraChatStreamFetch(handlers: StreamHandlers): { close: () =>
 
   const connect = async () => {
     if (closed) return;
-    const token = await getUltraChatToken();
+    const token = getUltraChatToken();
     const url = ultraChatApiUrl(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
     const abort = new AbortController();
     abortRef.current = abort;
@@ -394,13 +393,10 @@ function subscribeUltraChatStreamEventSource(handlers: StreamHandlers): { close:
   let es: EventSource | null = null;
   let closed = false;
 
-  void (async () => {
-    const token = await getUltraChatToken();
-    if (closed) return;
-    const url = ultraChatApiUrl(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
-    const g = globalThis as { EventSource?: typeof EventSource };
-    if (typeof g.EventSource === "undefined") return;
-
+  const token = getUltraChatToken();
+  const url = ultraChatApiUrl(`/api/notifications/stream?token=${encodeURIComponent(token)}`);
+  const g = globalThis as { EventSource?: typeof EventSource };
+  if (typeof g.EventSource !== "undefined") {
     es = new g.EventSource(url);
     const handle = (event: MessageEvent) => {
       const name = (event as Event & { type?: string }).type || "message";
@@ -411,7 +407,7 @@ function subscribeUltraChatStreamEventSource(handlers: StreamHandlers): { close:
     es.onmessage = handle;
     es.addEventListener("connected", handle as EventListener);
     es.onerror = (e) => handlers.onError?.(e);
-  })();
+  }
 
   return {
     close: () => {
