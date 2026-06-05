@@ -67,7 +67,7 @@ export default function CampaignScreen({ navigation, onLoggedOut }: Props) {
   };
 
   const goToDashboard = () => {
-    navigation.getParent()?.getParent()?.navigate("Dashboard");
+    navigation.getParent()?.getParent()?.navigate("Home");
   };
 
   return (

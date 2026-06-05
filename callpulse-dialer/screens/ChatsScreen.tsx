@@ -135,12 +135,11 @@ export default function ChatsScreen() {
         <View style={styles.searchBar}>
           <Text style={styles.searchIcon}>⌕</Text>
           <TextInput
-            style={styles.searchInput}
+            style={Platform.OS === "web" ? [styles.searchInput, { outlineStyle: "none" } as object] : styles.searchInput}
             placeholder="Search"
             placeholderTextColor={C.searchText}
             value={search}
             onChangeText={setSearch}
-            {...(Platform.OS === "web" ? { style: [styles.searchInput, { outlineStyle: "none" } as object] } : {})}
           />
         </View>
 

@@ -8,11 +8,11 @@ export type CampaignsStackParamList = {
 };
 
 export type MainTabParamList = {
-  Dashboard: undefined;
+  Home: undefined;
+  Leads: NavigatorScreenParams<CampaignsStackParamList> | undefined;
   Dial: undefined;
-  Chats: undefined;
-  CallHistory: undefined;
-  Campaigns: NavigatorScreenParams<CampaignsStackParamList> | undefined;
+  Inbox: undefined;
+  More: undefined;
 };
 
 export type RootStackParamList = {
@@ -45,5 +45,10 @@ export type RootStackParamList = {
     contactPhone: string;
     contactInitials: string;
     contactOnline: boolean;
+  };
+  LeadTimeline: {
+    contactId: string;
+    contactName: string;
+    contactPhone: string;
   };
 };

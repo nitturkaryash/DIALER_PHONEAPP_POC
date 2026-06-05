@@ -3,22 +3,26 @@ import { Platform, Pressable, StyleSheet, Text, View } from "react-native";
 import type { BottomTabBarProps } from "@react-navigation/bottom-tabs";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as Haptics from "expo-haptics";
+import { Ionicons } from "@expo/vector-icons";
 
 import { theme } from "../theme";
 
 type TabConfig = {
   label: string;
-  short: string;
+  icon: keyof typeof Ionicons.glyphMap;
+  short?: string;
   emphasize?: boolean;
 };
 
 const TAB_CONFIG: Record<string, TabConfig> = {
-  Dashboard: { label: "Home", short: "H" },
-  Dial: { label: "Dial", short: "D", emphasize: true },
-  Chats: { label: "Chats", short: "💬" },
-  CallHistory: { label: "History", short: "L" },
-  Campaigns: { label: "Campaigns", short: "C" },
+  Home:  { label: "Home",  icon: "home-outline",                emphasize: false },
+  Leads: { label: "Leads", icon: "people-outline",              emphasize: false },
+  Dial:  { label: "Dial",  icon: "keypad",                      emphasize: true  },
+  Inbox: { label: "Inbox", icon: "chatbubbles-outline",         emphasize: false },
+  More:  { label: "More",  icon: "ellipsis-horizontal-outline", emphasize: false },
 };
+
+const INACTIVE_COLOR = "#999";
 
 export default function AppTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
@@ -28,8 +32,9 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
     <View style={[styles.wrap, { paddingBottom: bottomInset }]}>
       {state.routes.map((route, index) => {
         const focused = state.index === index;
-        const config = TAB_CONFIG[route.name] ?? { label: route.name, short: route.name[0] ?? "•" };
+        const config = TAB_CONFIG[route.name] ?? { label: route.name, icon: "ellipsis-horizontal-outline" as const };
         const { options } = descriptors[route.key];
+        const color = focused ? theme.colors.primary : INACTIVE_COLOR;
 
         const onPress = () => {
           if (Platform.OS !== "web") {
@@ -44,8 +49,8 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
             navigation.navigate(route.name);
             return;
           }
-          if (focused && route.name === "Campaigns") {
-            navigation.navigate("Campaigns", { screen: "CampaignList" });
+          if (focused && route.name === "Leads") {
+            navigation.navigate("Leads", { screen: "CampaignList" });
           }
         };
 
@@ -58,18 +63,21 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
             onPress={onPress}
             style={({ pressed }) => [styles.tab, pressed && styles.tabPressed]}
           >
-            <View
-              style={[
-                styles.iconWrap,
-                config.emphasize && styles.iconWrapEmphasized,
-                focused && styles.iconWrapActive,
-              ]}
-            >
-              <Text style={[styles.icon, focused && styles.iconActive]}>{config.short}</Text>
-            </View>
-            <Text style={[styles.label, focused && styles.labelActive]} numberOfLines={1}>
-              {config.label}
-            </Text>
+            {config.emphasize ? (
+              <View style={styles.dialButton}>
+                <Ionicons name="keypad" size={26} color="#FFFFFF" />
+              </View>
+            ) : (
+              <>
+                <Ionicons name={config.icon} size={22} color={color} />
+                <Text
+                  style={[styles.label, { color, fontWeight: focused ? "600" : "400" }]}
+                  numberOfLines={1}
+                >
+                  {config.label}
+                </Text>
+              </>
+            )}
           </Pressable>
         );
       })}
@@ -80,6 +88,8 @@ export default function AppTabBar({ state, descriptors, navigation }: BottomTabB
 const styles = StyleSheet.create({
   wrap: {
     flexDirection: "row",
+    alignItems: "flex-start",
+    minHeight: 72,
     backgroundColor: theme.colors.card,
     borderTopWidth: 1,
     borderTopColor: theme.colors.border,
@@ -96,38 +106,23 @@ const styles = StyleSheet.create({
   tabPressed: {
     opacity: 0.85,
   },
-  iconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: theme.radius.base,
+  label: {
+    fontSize: 11,
+    marginTop: 3,
+  },
+  dialButton: {
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: theme.colors.primary,
     alignItems: "center",
     justifyContent: "center",
-  },
-  iconWrapEmphasized: {
-    width: 36,
-    height: 36,
-    borderRadius: theme.radius.full,
-    backgroundColor: theme.colors.surfaceMuted,
-  },
-  iconWrapActive: {
-    backgroundColor: theme.colors.primarySoft,
-  },
-  icon: {
-    fontSize: theme.fontSize.sm,
-    fontWeight: theme.fontWeight.semibold,
-    color: theme.colors.textTertiary,
-  },
-  iconActive: {
-    color: theme.colors.primary,
-  },
-  label: {
-    marginTop: 2,
-    fontSize: theme.fontSize.xs,
-    color: theme.colors.textTertiary,
-    fontWeight: theme.fontWeight.medium,
-  },
-  labelActive: {
-    color: theme.colors.primary,
-    fontWeight: theme.fontWeight.semibold,
+    marginTop: -28,
+    marginBottom: 16,
+    shadowColor: theme.colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4,
+    shadowRadius: 8,
+    elevation: 8,
   },
 });

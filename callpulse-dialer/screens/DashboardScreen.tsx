@@ -1,6 +1,9 @@
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -34,7 +37,7 @@ import type {
 } from "../types";
 
 type Props = CompositeScreenProps<
-  BottomTabScreenProps<MainTabParamList, "Dashboard">,
+  BottomTabScreenProps<MainTabParamList, "Home">,
   NativeStackScreenProps<RootStackParamList>
 > & {
   onLoggedOut: () => void;
@@ -97,6 +100,7 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [agent, setAgent] = useState<Agent | null>(null);
   const [summary, setSummary] = useState<AgentDashboardSummary | null>(null);
   const [trends, setTrends] = useState<AgentDashboardTrendPoint[]>([]);
@@ -156,6 +160,17 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
     navigation.replace("Login");
   };
 
+  const hour = new Date().getHours();
+  const greeting =
+    hour < 12 ? "Good morning," : hour < 17 ? "Good afternoon," : "Good evening,";
+  const firstName = agent?.full_name?.split(" ")[0] || "Agent";
+  const initials = (agent?.full_name ?? "A")
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+
   const maxFunnelValue = Math.max(
     funnel?.attempted ?? 0,
     funnel?.connected ?? 0,
@@ -175,13 +190,61 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
       >
         <View style={styles.header}>
           <View style={{ flex: 1 }}>
-            <Text style={styles.title}>Agent Dashboard</Text>
-            <Text style={styles.subtitle}>{agent?.full_name || "CallPulse Agent"}</Text>
+            <Text style={styles.greeting}>{greeting}</Text>
+            <Text style={styles.agentName}>{firstName}</Text>
           </View>
-          <TouchableOpacity style={styles.headerAction} activeOpacity={0.85} onPress={handleLogout}>
-            <Text style={styles.headerActionText}>Logout</Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            onPress={() => setShowProfileMenu(true)}
+            style={styles.avatarBtn}
+          >
+            <Text style={styles.avatarInitials}>{initials}</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Profile dropdown */}
+        <Modal
+          visible={showProfileMenu}
+          transparent
+          animationType="fade"
+          onRequestClose={() => setShowProfileMenu(false)}
+        >
+          <Pressable style={styles.menuOverlay} onPress={() => setShowProfileMenu(false)}>
+            <View style={styles.menuCard}>
+              <View style={styles.menuHeader}>
+                <View style={styles.menuAvatar}>
+                  <Text style={styles.menuAvatarInitials}>{initials}</Text>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.menuName}>{agent?.full_name || "Agent"}</Text>
+                  <Text style={styles.menuEmail} numberOfLines={1}>{agent?.email || ""}</Text>
+                </View>
+              </View>
+              <View style={styles.menuDivider} />
+              <TouchableOpacity
+                style={styles.menuRow}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  Alert.alert("Coming Soon", "Settings will be available soon.");
+                }}
+              >
+                <Text style={styles.menuRowText}>Settings</Text>
+              </TouchableOpacity>
+              <View style={styles.menuDivider} />
+              <TouchableOpacity
+                style={styles.menuRow}
+                activeOpacity={0.7}
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  handleLogout();
+                }}
+              >
+                <Text style={[styles.menuRowText, styles.menuRowDestructive]}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Modal>
 
         {loading ? (
           <View style={styles.center}>
@@ -293,7 +356,7 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
               )}
             </View>
 
-            <TouchableOpacity style={styles.primaryAction} onPress={() => navigation.navigate("Campaigns", { screen: "CampaignList" })}>
+            <TouchableOpacity style={styles.primaryAction} onPress={() => navigation.navigate("Leads", { screen: "CampaignList" })}>
               <Text style={styles.primaryActionText}>Open Campaigns</Text>
             </TouchableOpacity>
           </>
@@ -315,28 +378,90 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: theme.spacing.lg,
   },
-  title: {
+  greeting: {
+    fontSize: theme.fontSize.base,
+    color: theme.colors.textSecondary,
+    fontWeight: "400",
+  },
+  agentName: {
     fontSize: theme.fontSize.xl,
+    fontWeight: "700",
+    color: theme.colors.textPrimary,
+    marginTop: 2,
+  },
+  avatarBtn: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarInitials: {
+    fontSize: theme.fontSize.sm,
+    fontWeight: "700",
+    color: "#FFFFFF",
+    letterSpacing: 0.5,
+  },
+  menuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.25)",
+    justifyContent: "flex-start",
+    alignItems: "flex-end",
+    paddingTop: 80,
+    paddingRight: theme.spacing.screen,
+  },
+  menuCard: {
+    backgroundColor: theme.colors.card,
+    borderRadius: theme.radius.lg,
+    minWidth: 220,
+    ...theme.shadow.card,
+    overflow: "hidden",
+  },
+  menuHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    padding: 16,
+  },
+  menuAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: theme.colors.primary,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  menuAvatarInitials: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FFFFFF",
+  },
+  menuName: {
+    fontSize: theme.fontSize.base,
     fontWeight: "600",
     color: theme.colors.textPrimary,
   },
-  subtitle: {
-    marginTop: theme.spacing.xs,
+  menuEmail: {
+    fontSize: theme.fontSize.xs,
+    color: theme.colors.textSecondary,
+    marginTop: 1,
+  },
+  menuDivider: {
+    height: 1,
+    backgroundColor: theme.colors.border,
+  },
+  menuRow: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  menuRowText: {
     fontSize: theme.fontSize.base,
-    color: theme.colors.textSecondary,
-  },
-  headerAction: {
-    borderRadius: theme.radius.full,
-    borderWidth: 1,
-    borderColor: theme.colors.border,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.sm,
-    backgroundColor: theme.colors.card,
-  },
-  headerActionText: {
-    color: theme.colors.textSecondary,
-    fontSize: theme.fontSize.sm,
     fontWeight: "500",
+    color: theme.colors.textPrimary,
+  },
+  menuRowDestructive: {
+    color: theme.colors.error,
   },
   center: { paddingVertical: theme.spacing["3xl"], alignItems: "center" },
   card: {

@@ -10,6 +10,7 @@ import HumanCallScreen from "../screens/HumanCallScreen";
 import OutboundCallScreen from "../screens/OutboundCallScreen";
 import CallHistoryDetailScreen from "../screens/CallHistoryDetailScreen";
 import ChatDetailScreen from "../screens/ChatDetailScreen";
+import LeadTimelineScreen from "../screens/LeadTimelineScreen";
 import { theme } from "../theme";
 import MainTabNavigator from "./MainTabNavigator";
 import type { RootStackParamList } from "./types";
@@ -65,6 +66,7 @@ export default function RootNavigator() {
       <Stack.Screen name="Disposition" component={DispositionScreen} options={modalOptions} />
       <Stack.Screen name="CallHistoryDetail" component={CallHistoryDetailScreen} options={modalOptions} />
       <Stack.Screen name="ChatDetail" component={ChatDetailScreen} />
+      <Stack.Screen name="LeadTimeline" component={LeadTimelineScreen} options={{ headerShown: false }} />
     </Stack.Navigator>
   );
 }

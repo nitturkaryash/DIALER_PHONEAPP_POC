@@ -10,15 +10,11 @@ import {
   View,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 
 import { useRootNavigation } from "../navigation/useRootNavigation";
-import type { MainTabParamList } from "../navigation/types";
 import { AuthError, clearToken, getCallHistory, getToken } from "../services/api";
 import { theme } from "../theme";
 import type { CallHistoryItem, CallHistorySummary } from "../types";
-
-type Props = BottomTabScreenProps<MainTabParamList, "CallHistory">;
 
 const STATUS_FILTERS = ["all", "completed", "failed", "ringing"] as const;
 
@@ -47,7 +43,7 @@ function statusColor(status: string): string {
   return theme.colors.textSecondary;
 }
 
-export default function CallHistoryScreen({}: Props) {
+export default function CallHistoryScreen() {
   const rootNavigation = useRootNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -191,11 +187,17 @@ export default function CallHistoryScreen({}: Props) {
             keyExtractor={(item) => item.id || item.call_id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.colors.primary} />}
             contentContainerStyle={[styles.listContent, items.length === 0 && styles.center]}
-            renderItem={({ item }: { item: CallHistoryItem }) => (
+            renderItem={({ item, index }: { item: CallHistoryItem; index: number }) => (
               <TouchableOpacity
                 style={styles.rowCard}
                 activeOpacity={0.9}
-                onPress={() => rootNavigation.navigate("CallHistoryDetail", { callId: item.call_id })}
+                onPress={() =>
+                  rootNavigation.navigate("LeadTimeline", {
+                    contactId: String(item.id ?? item.call_id ?? index),
+                    contactName: item.customer_name ?? "Unknown",
+                    contactPhone: item.phone_number ?? "",
+                  })
+                }
               >
                 <View style={styles.rowTop}>
                   <Text style={styles.customer}>{item.customer_name || "Unknown"}</Text>
