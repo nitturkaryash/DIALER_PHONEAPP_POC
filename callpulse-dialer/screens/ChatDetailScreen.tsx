@@ -12,12 +12,14 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Feather } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import { formatTime, type ChatMessage } from "../services/chatData";
 import {
   fetchUltraChatHistory,
   markUltraChatRead,
+  mergeChatMessages,
   messageFromStreamPayload,
   normalizeWhatsAppPhone,
   phoneFromStreamPayload,
@@ -62,17 +64,28 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
   const [error, setError] = useState("");
 
   const loadHistory = useCallback(
-    async (opts?: { silent?: boolean; scrollEnd?: boolean }) => {
+    async (opts?: { silent?: boolean; scrollEnd?: boolean; merge?: boolean }) => {
       const silent = opts?.silent ?? false;
       const scrollEnd = opts?.scrollEnd ?? !silent;
+      const merge = opts?.merge ?? false;
       try {
         if (!silent) setLoading(true);
         setError("");
         const history = await fetchUltraChatHistory(contactId);
-        setMessages(history);
+        let shouldScroll = scrollEnd;
+        setMessages((prev) => {
+          const next = merge ? mergeChatMessages(prev, history) : history;
+          const prevLast = prev[prev.length - 1]?.id;
+          const nextLast = next[next.length - 1]?.id;
+          if (merge && prevLast === nextLast && prev.length === next.length) {
+            shouldScroll = false;
+            return prev;
+          }
+          return next;
+        });
         await markUltraChatRead(contactId);
-        if (scrollEnd) {
-          setTimeout(() => flatRef.current?.scrollToEnd({ animated: false }), 100);
+        if (shouldScroll) {
+          setTimeout(() => flatRef.current?.scrollToEnd({ animated: merge }), 100);
         }
       } catch (e) {
         if (!silent) setError(e instanceof Error ? e.message : "Failed to load messages");
@@ -93,27 +106,40 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
         const phone = phoneFromStreamPayload(payload);
         if (!phone || normalizeWhatsAppPhone(phone) !== normalizeWhatsAppPhone(contactId)) return;
         const msg = messageFromStreamPayload(payload);
-        if (!msg) return;
+        if (!msg) {
+          void loadHistory({ silent: true, scrollEnd: true });
+          return;
+        }
         setMessages((prev) => {
           if (prev.some((m) => m.id === msg.id)) return prev;
+          if (msg.fromMe) {
+            const withoutOptimistic = prev.filter(
+              (m) => !(m.fromMe && m.id.startsWith("local-") && m.text === msg.text)
+            );
+            if (withoutOptimistic.some((m) => m.id === msg.id)) return withoutOptimistic;
+            return [...withoutOptimistic, msg];
+          }
           return [...prev, msg];
         });
         void markUltraChatRead(contactId);
         setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
       },
+      onError: () => {
+        void loadHistory({ silent: true, scrollEnd: false });
+      },
     });
 
-    const poll = sub
-      ? undefined
-      : setInterval(() => {
-          void loadHistory({ silent: true, scrollEnd: false });
-        }, 30000);
-
-    return () => {
-      sub?.close();
-      if (poll) clearInterval(poll);
-    };
+    return () => sub.close();
   }, [contactId, loadHistory]);
+
+  useFocusEffect(
+    useCallback(() => {
+      const poll = setInterval(() => {
+        void loadHistory({ silent: true, scrollEnd: true, merge: true });
+      }, 4000);
+      return () => clearInterval(poll);
+    }, [loadHistory])
+  );
 
   const send = useCallback(async () => {
     const text = input.trim();

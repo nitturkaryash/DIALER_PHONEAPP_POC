@@ -15,7 +15,10 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { LinearGradient } from "expo-linear-gradient";
 
 import BreakTimeButton from "../components/BreakTimeButton";
+import { HomeContactsSection } from "../components/HomeContactsSection";
 import { BadgeChip, PrimaryButton, ScreenChrome, ScreenHeader } from "../components/ui";
+import { useRootNavigation } from "../navigation/useRootNavigation";
+import type { ChatContact } from "../services/chatData";
 import type { MainTabParamList, RootStackParamList } from "../navigation/types";
 import {
   AuthError,
@@ -64,6 +67,7 @@ function isToday(value?: string | null): boolean {
 }
 
 export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
+  const rootNavigation = useRootNavigation();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
@@ -122,6 +126,16 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
     await logout();
     onLoggedOut();
     navigation.replace("Login");
+  };
+
+  const openContactChat = (contact: ChatContact) => {
+    rootNavigation.navigate("ChatDetail", {
+      contactId: contact.id,
+      contactName: contact.name,
+      contactPhone: contact.phone,
+      contactInitials: contact.initials,
+      contactOnline: contact.online,
+    });
   };
 
   const todaysCalls = useMemo(() => recentCalls.filter((c) => isToday(c.started_at)), [recentCalls]);
@@ -211,6 +225,11 @@ export default function DashboardScreen({ navigation, onLoggedOut }: Props) {
                 <Text style={styles.metricHint}>last {recentCalls.length} calls</Text>
               </View>
             </View>
+
+            <HomeContactsSection
+              onOpenChat={openContactChat}
+              onViewAll={() => navigation.navigate("Chats")}
+            />
 
             <View style={styles.card}>
               <Text style={styles.cardTitle}>Today's calls</Text>

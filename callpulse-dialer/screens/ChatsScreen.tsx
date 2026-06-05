@@ -11,13 +11,18 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
 
 import { Feather } from "@expo/vector-icons";
 
 import { formatTime, type ChatContact } from "../services/chatData";
-import { fetchUltraChatContacts, formatPhoneDisplay } from "../services/ultrachatChatApi";
+import {
+  applyStreamToContacts,
+  fetchUltraChatContacts,
+  formatPhoneDisplay,
+  subscribeUltraChatStream,
+} from "../services/ultrachatChatApi";
 import { ULTRACHAT_BUSINESS_PHONE, ULTRACHAT_DEMO_ENABLED } from "../services/ultrachatConfig";
 import type { RootStackParamList } from "../navigation/types";
 import { theme } from "../theme";
@@ -118,6 +123,31 @@ export default function ChatsScreen() {
     const t = setTimeout(() => void loadContacts(search, isSearch), delay);
     return () => clearTimeout(t);
   }, [search, loadContacts]);
+
+  useEffect(() => {
+    if (search.trim()) return undefined;
+
+    const sub = subscribeUltraChatStream({
+      onEvent: (_name, payload) => {
+        setContacts((prev) => applyStreamToContacts(prev, payload) ?? prev);
+      },
+      onError: () => {
+        void loadContacts(undefined, true);
+      },
+    });
+
+    return () => sub.close();
+  }, [search, loadContacts]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (search.trim()) return undefined;
+      const poll = setInterval(() => {
+        void loadContacts(undefined, true);
+      }, 6000);
+      return () => clearInterval(poll);
+    }, [search, loadContacts])
+  );
 
   return (
     <View style={styles.root}>
