@@ -65,12 +65,17 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
   const { contactId, contactName, contactPhone, contactInitials, contactOnline } = route.params;
   const insets = useSafeAreaInsets();
   const flatRef = useRef<FlatList>(null);
+  const sendingRef = useRef(false);
 
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    sendingRef.current = sending;
+  }, [sending]);
 
   const loadHistory = useCallback(
     async (opts?: { silent?: boolean; scrollEnd?: boolean; merge?: boolean }) => {
@@ -119,17 +124,7 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
           void loadHistory({ silent: true, scrollEnd: true });
           return;
         }
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === msg.id)) return prev;
-          if (msg.fromMe) {
-            const withoutOptimistic = prev.filter(
-              (m) => !(m.fromMe && m.id.startsWith("local-") && m.text === msg.text)
-            );
-            if (withoutOptimistic.some((m) => m.id === msg.id)) return withoutOptimistic;
-            return [...withoutOptimistic, msg];
-          }
-          return [...prev, msg];
-        });
+        setMessages((prev) => mergeChatMessages(prev, [msg]));
         void markUltraChatRead(contactId);
         setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
       },
@@ -152,7 +147,7 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
 
   const send = useCallback(async () => {
     const text = input.trim();
-    if (!text || sending) return;
+    if (!text || sendingRef.current) return;
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
       text,
@@ -162,6 +157,7 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
     };
     setMessages((prev) => [...prev, optimistic]);
     setInput("");
+    sendingRef.current = true;
     setSending(true);
     setTimeout(() => flatRef.current?.scrollToEnd({ animated: true }), 80);
     try {
@@ -169,15 +165,16 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
     } catch (e) {
       setError(e instanceof Error ? e.message : "Send failed");
     } finally {
+      sendingRef.current = false;
       setSending(false);
     }
-  }, [contactId, input, sending]);
+  }, [contactId, input]);
 
   return (
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 24}
+      keyboardVerticalOffset={insets.top}
     >
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable onPress={() => navigation.goBack()} style={styles.backBtn}>
@@ -219,6 +216,8 @@ export default function ChatDetailScreen({ route, navigation }: Props) {
           keyExtractor={(m) => m.id}
           style={styles.messageList}
           contentContainerStyle={styles.messageContent}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
           onLayout={() => flatRef.current?.scrollToEnd({ animated: false })}
           renderItem={({ item }) => <Bubble msg={item} />}
           ListEmptyComponent={

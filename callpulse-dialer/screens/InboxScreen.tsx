@@ -1,36 +1,45 @@
 import React, { useState } from "react";
 import { View, Text, Pressable, StyleSheet } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { theme } from "../theme";
 import ChatsScreen from "./ChatsScreen";
 import CallHistoryScreen from "./CallHistoryScreen";
+import SmartCallScreen from "./SmartCallScreen";
+
+type InboxTab = "smart" | "messages" | "calllog";
+
+const TABS: { key: InboxTab; label: string }[] = [
+  { key: "smart", label: "Smart" },
+  { key: "messages", label: "Messages" },
+  { key: "calllog", label: "Call Log" },
+];
 
 export default function InboxScreen() {
-  const [activeTab, setActiveTab] = useState<"messages" | "calllog">("messages");
-  const insets = useSafeAreaInsets();
+  const [activeTab, setActiveTab] = useState<InboxTab>("smart");
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <View style={styles.container}>
       <View style={styles.segmentContainer}>
-        <Pressable
-          style={[styles.segment, activeTab === "messages" && styles.segmentActive]}
-          onPress={() => setActiveTab("messages")}
-        >
-          <Text style={[styles.segmentText, activeTab === "messages" && styles.segmentTextActive]}>
-            Messages
-          </Text>
-        </Pressable>
-        <Pressable
-          style={[styles.segment, activeTab === "calllog" && styles.segmentActive]}
-          onPress={() => setActiveTab("calllog")}
-        >
-          <Text style={[styles.segmentText, activeTab === "calllog" && styles.segmentTextActive]}>
-            Call Log
-          </Text>
-        </Pressable>
+        {TABS.map((tab) => {
+          const active = activeTab === tab.key;
+          return (
+            <Pressable
+              key={tab.key}
+              style={[styles.segment, active && styles.segmentActive]}
+              onPress={() => setActiveTab(tab.key)}
+            >
+              <Text style={[styles.segmentText, active && styles.segmentTextActive]}>{tab.label}</Text>
+            </Pressable>
+          );
+        })}
       </View>
       <View style={styles.content}>
-        {activeTab === "messages" ? <ChatsScreen /> : <CallHistoryScreen />}
+        {activeTab === "smart" ? (
+          <SmartCallScreen />
+        ) : activeTab === "messages" ? (
+          <ChatsScreen />
+        ) : (
+          <CallHistoryScreen />
+        )}
       </View>
     </View>
   );

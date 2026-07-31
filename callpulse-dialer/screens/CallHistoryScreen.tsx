@@ -12,38 +12,15 @@ import {
 import { Feather } from "@expo/vector-icons";
 import type { BottomTabScreenProps } from "@react-navigation/bottom-tabs";
 
+import CallThreadRow from "../components/CallThreadRow";
 import { EmptyState, ScreenChrome, ScreenHeader } from "../components/ui";
 import { useRootNavigation } from "../navigation/useRootNavigation";
 import { AuthError, clearToken, getCallHistory, getToken } from "../services/api";
+import { groupCallsByContact, type CallThread } from "../services/dialIntelligence";
 import { theme } from "../theme";
 import type { CallHistoryItem, CallHistorySummary } from "../types";
 
 const STATUS_FILTERS = ["all", "completed", "failed", "ringing"] as const;
-
-function formatDuration(seconds?: number | null): string {
-  if (!seconds || seconds <= 0) return "0m";
-  const hours = Math.floor(seconds / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  const secs = Math.floor(seconds % 60);
-  if (hours > 0) return `${hours}h ${minutes}m`;
-  if (minutes > 0) return `${minutes}m`;
-  return `${secs}s`;
-}
-
-function formatStartTime(value?: string | null): string {
-  if (!value) return "No start time";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "No start time";
-  return date.toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
-}
-
-function statusColor(status: string): string {
-  const normalized = status.toLowerCase();
-  if (normalized === "completed") return theme.colors.success;
-  if (normalized === "failed") return theme.colors.error;
-  if (normalized === "ringing") return theme.colors.warning;
-  return theme.colors.textSecondary;
-}
 
 export default function CallHistoryScreen() {
   const rootNavigation = useRootNavigation();
@@ -120,6 +97,19 @@ export default function CallHistoryScreen() {
     return `${Math.round((summary.completed_calls / summary.total_calls) * 100)}%`;
   }, [summary]);
 
+  const threads = useMemo(() => groupCallsByContact(items), [items]);
+
+  const openThread = useCallback(
+    (thread: CallThread) => {
+      rootNavigation.navigate("LeadTimeline", {
+        contactId: String(thread.latest.id ?? thread.latest.call_id ?? thread.phone),
+        contactName: thread.name,
+        contactPhone: thread.latest.phone_number ?? thread.phone,
+      });
+    },
+    [rootNavigation]
+  );
+
   return (
     <ScreenChrome>
       <View style={styles.container}>
@@ -185,36 +175,12 @@ export default function CallHistoryScreen() {
           </View>
         ) : (
           <FlatList
-            data={items}
-            keyExtractor={(item) => item.id || item.call_id}
+            data={threads}
+            keyExtractor={(thread) => thread.phone || thread.latest.id || thread.latest.call_id}
             refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={theme.colors.primary} />}
-            contentContainerStyle={[styles.listContent, items.length === 0 && styles.center]}
-            renderItem={({ item, index }: { item: CallHistoryItem; index: number }) => (
-              <TouchableOpacity
-                style={styles.rowCard}
-                activeOpacity={0.9}
-                onPress={() =>
-                  rootNavigation.navigate("LeadTimeline", {
-                    contactId: String(item.id ?? item.call_id ?? index),
-                    contactName: item.customer_name ?? "Unknown",
-                    contactPhone: item.phone_number ?? "",
-                  })
-                }
-              >
-                <View style={styles.rowTop}>
-                  <Text style={styles.customer}>{item.customer_name || "Unknown"}</Text>
-                  <Text style={[styles.status, { color: statusColor(item.status) }]}>{item.status}</Text>
-                </View>
-                <Text style={styles.meta}>{item.phone_number || "-"}</Text>
-                <Text style={styles.meta}>{item.campaign_name || "Direct / No campaign"}</Text>
-                <View style={styles.rowBottom}>
-                  <Text style={styles.meta}>{formatStartTime(item.started_at)}</Text>
-                  <View style={styles.rowRight}>
-                    <Text style={styles.duration}>{formatDuration(item.duration_seconds)}</Text>
-                    <Text style={styles.openLabel}>Open</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
+            contentContainerStyle={[styles.listContent, threads.length === 0 && styles.center]}
+            renderItem={({ item }: { item: CallThread }) => (
+              <CallThreadRow thread={item} onPress={openThread} />
             )}
             onEndReachedThreshold={0.5}
             onEndReached={onEndReached}

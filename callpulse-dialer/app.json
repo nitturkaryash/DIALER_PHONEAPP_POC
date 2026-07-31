@@ -34,14 +34,13 @@
     },
     "plugins": [
       "expo-asset",
-      "expo-font",
-      "react-native-audio-api"
+      "expo-font"
     ],
     "extra": {
       "eas": {
-        "projectId": "2b1e60d7-f6b2-495e-9703-190d4247e171"
+        "projectId": "0b65755b-7301-4dd6-9d99-040e2a5628df"
       }
     },
-    "owner": "ankit841226"
+    "owner": "yashqualia"
   }
 }

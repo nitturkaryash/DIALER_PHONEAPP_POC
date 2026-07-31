@@ -10,7 +10,14 @@
     "dev:tunnel": "npx expo start --dev-client --tunnel",
     "android": "npx expo start --android",
     "ios": "npx expo start --ios",
-    "web": "npx expo start --web"
+    "web": "npx expo start --web",
+    "test": "jest"
+  },
+  "jest": {
+    "preset": "jest-expo",
+    "transformIgnorePatterns": [
+      "node_modules/(?!((jest-)?react-native|@react-native(-community)?|expo(nent)?|@expo(nent)?/.*|@expo-google-fonts/.*|react-navigation|@react-navigation/.*|@unimodules/.*|unimodules|sentry-expo|native-base|react-native-svg))"
+    ]
   },
   "dependencies": {
     "@react-navigation/bottom-tabs": "^7.16.1",
@@ -38,8 +45,11 @@
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
+    "@types/jest": "^30.0.0",
     "@types/react": "~19.1.10",
     "babel-preset-expo": "~54.0.10",
+    "jest": "^29.7.0",
+    "jest-expo": "~54.0.0",
     "typescript": "~5.9.2"
   }
 }

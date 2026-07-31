@@ -30,17 +30,47 @@ function authHeaders(): Record<string, string> {
   };
 }
 
+function normalizeMessageText(text: string): string {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function toMs(iso: string): number {
+  const ms = new Date(iso).getTime();
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function fallbackMessageId(m: Record<string, unknown>, text: string, direction: string): string {
+  const ts = String(m.createdAt ?? m.created_at ?? m.timestamp ?? "");
+  const phone = String(m.phone_number ?? m.phoneNumber ?? "");
+  const status = String(m.status ?? "");
+  const normalized = normalizeMessageText(text);
+  return `fallback:${direction}:${phone}:${ts}:${status}:${normalized}`;
+}
+
 export function mergeChatMessages(
   existing: ChatMessage[],
   incoming: ChatMessage[]
 ): ChatMessage[] {
   const byId = new Map(existing.map((m) => [m.id, m]));
   for (const msg of incoming) {
-    byId.set(msg.id, msg);
+    const prev = byId.get(msg.id);
+    byId.set(msg.id, prev ? { ...prev, ...msg } : msg);
   }
-  return Array.from(byId.values()).sort(
+  const merged = Array.from(byId.values()).sort(
     (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
   );
+
+  const confirmedOutgoing = merged.filter((m) => m.fromMe && !m.id.startsWith("local-"));
+  return merged.filter((m) => {
+    if (!m.id.startsWith("local-")) return true;
+    const text = normalizeMessageText(m.text);
+    if (!text) return true;
+    const localTs = toMs(m.timestamp);
+    return !confirmedOutgoing.some((serverMsg) => {
+      if (normalizeMessageText(serverMsg.text) !== text) return false;
+      return Math.abs(toMs(serverMsg.timestamp) - localTs) <= 2 * 60 * 1000;
+    });
+  });
 }
 
 function initialsFor(name: string, phone: string): string {
@@ -88,9 +118,13 @@ export function mapApiContact(c: Record<string, unknown>): ChatContact {
 export function mapApiMessage(m: Record<string, unknown>): ChatMessage {
   const direction = String(m.direction ?? "inbound");
   const status = String(m.status ?? "received");
+  const text = previewText(m.message_sent ?? m.messageSent) || "";
+  const messageId =
+    String(m._id ?? m.message_id ?? m.id ?? m.wa_message_id ?? "").trim() ||
+    fallbackMessageId(m, text, direction);
   return {
-    id: String(m._id ?? m.message_id ?? `msg-${Date.now()}-${Math.random()}`),
-    text: previewText(m.message_sent ?? m.messageSent) || "",
+    id: messageId,
+    text,
     fromMe: direction === "outbound",
     timestamp: String(m.createdAt ?? m.created_at ?? new Date().toISOString()),
     status:

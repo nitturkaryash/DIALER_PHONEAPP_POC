@@ -10,11 +10,22 @@ if [[ -z "${IFACE:-}" ]]; then
   exit 1
 fi
 
+ENV_HOST=""
 if [[ -f .env ]]; then
-  ENV_HOST=$(grep -E '^EXPO_PUBLIC_DEV_HOST=' .env | head -1 | cut -d= -f2- | tr -d ' "'"'")
+  ENV_HOST=$(grep -E '^EXPO_PUBLIC_DEV_HOST=' .env 2>/dev/null | head -1 | cut -d= -f2- | tr -d " \t\"'" || true)
 fi
 
-IP="${ENV_HOST:-$(ipconfig getifaddr "$IFACE" 2>/dev/null || true)}"
+if [[ -n "$ENV_HOST" ]]; then
+  IP="$ENV_HOST"
+else
+  IP=$(ipconfig getifaddr "$IFACE" 2>/dev/null || true)
+  if [[ -z "$IP" ]]; then
+    for alt in en0 en1 bridge0; do
+      IP=$(ipconfig getifaddr "$alt" 2>/dev/null || true)
+      [[ -n "$IP" ]] && break
+    done
+  fi
+fi
 if [[ -z "${IP:-}" ]]; then
   echo "No IP on $IFACE. Set EXPO_PUBLIC_DEV_HOST in .env or connect Wi‑Fi first."
   exit 1
